@@ -4,6 +4,11 @@ export function getTodayIsoString(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+export function getLocalTodayIsoString(): string {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
+
 export function formatBs(monto: number): string {
   if (isNaN(monto)) return 'Bs 0';
   return `Bs ${new Intl.NumberFormat('es-BO', {

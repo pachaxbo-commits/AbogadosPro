@@ -14,3 +14,117 @@ body {
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
 }
+
+button:not(:disabled),
+a {
+  cursor: pointer;
+}
+
+button,
+[role="link"] {
+  user-select: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="link"]:focus-visible {
+  outline: 2px solid #1e3a5f;
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  button:not(:disabled):active,
+  a:active,
+  [role="link"]:active {
+    opacity: 0.78;
+  }
+}
+
+@media (max-width: 767px) {
+  .mobile-data-table,
+  .mobile-data-table tbody,
+  .mobile-data-table tr,
+  .mobile-data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .mobile-data-table thead {
+    display: none;
+  }
+
+  .mobile-data-table tbody {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f8fafc;
+  }
+
+  .mobile-data-table tr {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: white;
+    overflow: hidden;
+  }
+
+  .mobile-data-table td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.875rem;
+    text-align: right;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-data-table td:first-child {
+    display: block;
+    text-align: left;
+    padding-top: 0.875rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .mobile-data-table td:not(:first-child)::before {
+    content: attr(data-label);
+    flex: 0 0 5.75rem;
+    text-align: left;
+    color: #64748b;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+  }
+
+  .mobile-data-table td:not(:first-child) > * {
+    min-width: 0;
+  }
+
+  .mobile-data-table td:first-child .line-clamp-1 {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+  }
+
+  .mobile-data-table td:last-child {
+    border-top: 1px solid #f1f5f9;
+    padding-bottom: 0.875rem;
+  }
+
+  button,
+  input:not([type="radio"]):not([type="checkbox"]),
+  select {
+    min-height: 40px;
+  }
+
+  .modal-body form > div:last-child:has(> button[type="submit"]) {
+    position: sticky;
+    bottom: -1rem;
+    z-index: 1;
+    margin: 0 -1rem -1rem;
+    padding: 0.75rem 1rem;
+    background: white;
+    box-shadow: 0 -1px 3px rgb(15 23 42 / 0.08);
+  }
+}

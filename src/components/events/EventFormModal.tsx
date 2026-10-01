@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
-import { TipoEvento } from '../../types';
+import { Evento, TipoEvento } from '../../types';
 
 interface EventFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   preselectedCasoId?: string;
+  preselectedClientId?: string;
+  evento?: Evento;
   onSuccess?: () => void;
 }
 
@@ -14,22 +16,25 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   isOpen,
   onClose,
   preselectedCasoId,
+  preselectedClientId,
+  evento,
   onSuccess,
 }) => {
-  const { cases, addEvent } = useLegalData();
+  const { cases, addEvent, updateEvent } = useLegalData();
+  const availableCases = preselectedClientId ? cases.filter((c) => c.clienteId === preselectedClientId) : cases;
 
-  const [casoId, setCasoId] = useState(preselectedCasoId || (cases[0]?.id || ''));
-  const [tipo, setTipo] = useState<TipoEvento>('Audiencia');
-  const [titulo, setTitulo] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
-  const [hora, setHora] = useState('10:00');
-  const [descripcion, setDescripcion] = useState('');
-  const [juzgado, setJuzgado] = useState('');
+  const [casoId, setCasoId] = useState(evento?.casoId || preselectedCasoId || (availableCases[0]?.id || ''));
+  const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo || 'Audiencia');
+  const [titulo, setTitulo] = useState(evento?.titulo || '');
+  const [fecha, setFecha] = useState(evento?.fecha || new Date().toISOString().split('T')[0]);
+  const [hora, setHora] = useState(evento ? evento.hora || '' : '10:00');
+  const [descripcion, setDescripcion] = useState(evento?.descripcion || '');
+  const [juzgado, setJuzgado] = useState(evento?.juzgado || '');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const currentCasoId = casoId || preselectedCasoId || (cases[0]?.id || '');
+  const currentCasoId = preselectedCasoId || casoId || (availableCases[0]?.id || '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +54,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
     try {
       setIsSubmitting(true);
       setError('');
-      await addEvent({
+      const data = {
         casoId: currentCasoId,
         tipo,
         titulo: titulo.trim(),
@@ -57,18 +62,23 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         hora: hora.trim() || undefined,
         descripcion: descripcion.trim() || undefined,
         juzgado: juzgado.trim() || undefined,
-      });
+        realizado: evento?.realizado,
+      };
+      if (evento) await updateEvent(evento.id, data);
+      else await addEvent(data);
 
       // Limpiar formulario
-      setTitulo('');
-      setDescripcion('');
-      setJuzgado('');
+      if (!evento) {
+        setTitulo('');
+        setDescripcion('');
+        setJuzgado('');
+      }
 
       onClose();
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error(err);
-      setError('Error al agendar el evento');
+      setError(evento ? 'Error al editar el evento' : 'Error al agendar el evento');
     } finally {
       setIsSubmitting(false);
     }
@@ -78,8 +88,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Agendar Evento Judicial"
-      subtitle="Programar audiencia, vencimiento de plazo, actuado o reunión"
+      title={evento ? 'Editar evento' : 'Agendar evento'}
+      subtitle={evento ? 'Modificar los datos del evento' : 'Programar audiencia, vencimiento de plazo, actuado o reunión'}
       maxWidth="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,7 +101,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
 
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-            Caso Asociado <span className="text-rose-500">*</span>
+            Caso <span className="text-rose-500">*</span>
           </label>
           <select
             value={currentCasoId}
@@ -99,12 +109,15 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
             disabled={Boolean(preselectedCasoId)}
             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900 bg-white disabled:bg-slate-100"
           >
-            {cases.map((c) => (
+            {availableCases.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.nombre} ({c.tipoIdentificacionJudicial}: {c.numeroIdentificacionJudicial})
               </option>
             ))}
           </select>
+          {preselectedClientId && availableCases.length === 0 && (
+            <p className="mt-1 text-xs text-slate-500">Primero registra un caso para este cliente.</p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -183,7 +196,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
 
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-            Instrucciones / Observaciones
+            Notas / Instrucciones
           </label>
           <textarea
             rows={2}
@@ -204,10 +217,10 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || availableCases.length === 0}
             className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
           >
-            {isSubmitting ? 'Guardando...' : 'Agendar Evento'}
+            {isSubmitting ? 'Guardando...' : evento ? 'Guardar cambios' : 'Agendar Evento'}
           </button>
         </div>
       </form>

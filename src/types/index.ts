@@ -31,10 +31,12 @@ export type TipoEvento =
 
 export interface Cliente {
   id: string;
+  tipoCliente?: 'Persona' | 'Empresa'; // Opcional para registros anteriores
   nombre: string;
   telefono: string;
   correo?: string;
   identificacion?: string; // CI / NIT
+  direccion?: string;
   notas?: string;
   fechaRegistro: string;
 }
@@ -73,6 +75,7 @@ export interface Evento {
   hora?: string; // HH:mm
   descripcion?: string;
   juzgado?: string;
+  realizado?: boolean;
 }
 
 export interface Pago {
@@ -90,6 +93,15 @@ export interface Gasto {
   monto: number; // en Bs
   fecha: string; // YYYY-MM-DD
   nota?: string;
+  reembolsable?: boolean; // Registros anteriores sin este dato no generan deuda nueva.
+}
+
+export interface Reembolso {
+  id: string;
+  casoId: string;
+  monto: number;
+  fecha: string;
+  nota?: string;
 }
 
 // Modelos enriquecidos para la UI
@@ -98,6 +110,10 @@ export interface CasoConDetalles extends Caso {
   totalPagado: number;
   saldoPendiente: number;
   totalGastos: number;
+  gastosReembolsables: number;
+  totalReembolsado: number;
+  gastosPendientes: number;
+  totalPendiente: number;
   proximoEvento?: Evento;
 }
 
@@ -105,6 +121,8 @@ export interface ClienteConResumen extends Cliente {
   casosTotal: number;
   casosActivos: number;
   saldoPendienteTotal: number;
+  honorariosPendientesTotal: number;
+  gastosPendientesTotal: number;
 }
 
 export interface EventoConCaso extends Evento {

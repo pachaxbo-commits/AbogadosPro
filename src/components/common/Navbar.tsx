@@ -60,7 +60,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {navLinks.map((item) => {
               const Icon = item.icon;
               return (
@@ -84,7 +84,7 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Action */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <button
               type="button"
               onClick={handleReset}
@@ -98,12 +98,14 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex lg:hidden items-center gap-2">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-brand-800 focus:outline-hidden"
-              aria-label="Toggle menu"
+              className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-navigation"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -113,7 +115,7 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-brand-800 bg-brand-900 px-4 pt-2 pb-4 space-y-1">
+        <div id="mobile-navigation" className="lg:hidden border-t border-brand-800 bg-brand-900 px-4 pt-2 pb-4 space-y-1 max-h-[calc(100dvh-4rem)] overflow-y-auto">
           {navLinks.map((item) => {
             const Icon = item.icon;
             return (

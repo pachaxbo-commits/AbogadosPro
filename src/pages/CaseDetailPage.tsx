@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
@@ -7,7 +7,12 @@ import { ActivityFormModal } from '../components/activities/ActivityFormModal';
 import { EventFormModal } from '../components/events/EventFormModal';
 import { PaymentFormModal } from '../components/finances/PaymentFormModal';
 import { ExpenseFormModal } from '../components/finances/ExpenseFormModal';
-import { formatBs, formatFecha, formatHora } from '../services/formatters';
+import { ReimbursementFormModal } from '../components/finances/ReimbursementFormModal';
+import { FinancialRowActions } from '../components/finances/FinancialRowActions';
+import { Modal } from '../components/common/Modal';
+import { Pago, Gasto, Reembolso } from '../types';
+import { CaseFormModal } from '../components/cases/CaseFormModal';
+import { formatBs, formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import { AlertBadge } from '../components/common/AlertBadge';
 import {
   User,
@@ -19,6 +24,7 @@ import {
   FileText,
   Receipt,
   Info,
+  ChevronDown,
 } from 'lucide-react';
 
 type TabType = 'resumen' | 'actividad' | 'agenda' | 'finanzas';
@@ -31,6 +37,10 @@ export const CaseDetailPage: React.FC = () => {
     activities,
     payments,
     expenses,
+    reimbursements,
+    deletePayment,
+    deleteExpense,
+    deleteReimbursement,
     eventsWithCase,
   } = useLegalData();
 
@@ -38,6 +48,22 @@ export const CaseDetailPage: React.FC = () => {
   const activeTab: TabType = ['resumen', 'actividad', 'agenda', 'finanzas'].includes(tabParam)
     ? tabParam
     : 'resumen';
+  const selectedEventId = searchParams.get('evento');
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 'agenda' || !selectedEventId || !eventsWithCase.some((event) => event.id === selectedEventId && event.casoId === id)) return;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(`evento-${selectedEventId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedEventId(selectedEventId);
+      timeout = setTimeout(() => setHighlightedEventId(null), 1800);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [activeTab, selectedEventId, eventsWithCase, id]);
 
   const handleTabChange = (tab: TabType) => {
     setSearchParams({ tab });
@@ -48,6 +74,17 @@ export const CaseDetailPage: React.FC = () => {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isReimbursementModalOpen, setIsReimbursementModalOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Pago | undefined>();
+  const [selectedExpense, setSelectedExpense] = useState<Gasto | undefined>();
+  const [selectedReimbursement, setSelectedReimbursement] = useState<Reembolso | undefined>();
+  const [pendingDelete, setPendingDelete] = useState<{ type: 'pago' | 'gasto' | 'reembolso'; id: string; monto: number } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
+  const [financeError, setFinanceError] = useState('');
+  const [financeSuccess, setFinanceSuccess] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
 
   const caso = id ? getCaseWithDetails(id) : undefined;
 
@@ -72,6 +109,10 @@ export const CaseDetailPage: React.FC = () => {
 
   // Eventos del caso (ordenados cronológicamente más próximos primero)
   const caseEvents = eventsWithCase.filter((e) => e.casoId === caso.id);
+  const urgentEvent = caseEvents.find((event) =>
+    event.fecha >= getTodayIsoString() &&
+    (event.alertaVisual?.tipo === 'hoy' || event.alertaVisual?.tipo === 'urgente')
+  );
 
   // Pagos y Gastos
   const casePayments = payments
@@ -81,6 +122,31 @@ export const CaseDetailPage: React.FC = () => {
   const caseExpenses = expenses
     .filter((g) => g.casoId === caso.id)
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const caseReimbursements = reimbursements
+    .filter((r) => r.casoId === caso.id)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setFinanceError('');
+    try {
+      if (pendingDelete.type === 'pago') await deletePayment(pendingDelete.id);
+      else if (pendingDelete.type === 'gasto') await deleteExpense(pendingDelete.id);
+      else await deleteReimbursement(pendingDelete.id);
+      setFinanceSuccess(`${pendingDelete.type === 'pago' ? 'Pago' : pendingDelete.type === 'gasto' ? 'Gasto' : 'Reembolso'} eliminado correctamente.`);
+      setPendingDelete(null);
+    } catch (error) {
+      console.error(error);
+      setFinanceError(pendingDelete.type === 'gasto' && error instanceof Error && error.message === 'Gasto con reembolsos asociados'
+        ? 'No se puede eliminar este gasto mientras existan reembolsos que lo superen.'
+        : 'No se pudo eliminar el registro. Intenta nuevamente.');
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -91,7 +157,7 @@ export const CaseDetailPage: React.FC = () => {
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Volver a la lista de Expedientes</span>
+          <span>Volver a Casos</span>
         </Link>
       </div>
 
@@ -114,6 +180,15 @@ export const CaseDetailPage: React.FC = () => {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
               {caso.nombre}
             </h1>
+
+            {urgentEvent?.alertaVisual && (
+              <AlertBadge alerta={{
+                ...urgentEvent.alertaVisual,
+                mensaje: urgentEvent.alertaVisual.tipo === 'hoy'
+                  ? `${urgentEvent.tipo} hoy${urgentEvent.hora ? ` · ${formatHora(urgentEvent.hora)}` : ''}`
+                  : urgentEvent.alertaVisual.mensaje,
+              }} />
+            )}
 
             <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
               <div className="flex items-center gap-1.5">
@@ -141,8 +216,47 @@ export const CaseDetailPage: React.FC = () => {
             </div>
           </div>
 
+          <div className="flex flex-col items-start lg:items-end gap-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(true)}
+                className="px-3.5 py-2 text-xs font-semibold text-brand-900 bg-white border border-slate-300 rounded-md hover:bg-brand-50 transition-colors"
+              >
+                Editar caso
+              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsActionsOpen((open) => !open)}
+                  aria-expanded={isActionsOpen}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors"
+                >
+                  Acciones <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                {isActionsOpen && (
+                  <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-sm">
+                    {([
+                      ['Registrar actividad', () => setIsActivityModalOpen(true)],
+                      ['Agendar evento', () => setIsEventModalOpen(true)],
+                      ['Registrar pago', () => { setFinanceSuccess(''); setSelectedPayment(undefined); setIsPaymentModalOpen(true); }],
+                      ['Registrar gasto', () => { setFinanceSuccess(''); setSelectedExpense(undefined); setIsExpenseModalOpen(true); }],
+                    ] as const).map(([label, openModal]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => { setIsActionsOpen(false); openModal(); }}
+                        className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-brand-50 focus-visible:bg-brand-50"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           {/* Resumen económico rápido en cabecera */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs flex lg:flex-col justify-between gap-4 lg:gap-1.5 min-w-[200px]">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs flex flex-col sm:flex-row lg:flex-col justify-between gap-2 sm:gap-4 lg:gap-1.5 min-w-[200px]">
             <div className="flex justify-between items-center gap-3">
               <span className="text-slate-500">Honorarios:</span>
               <span className="font-bold font-mono text-slate-900">
@@ -150,15 +264,16 @@ export const CaseDetailPage: React.FC = () => {
               </span>
             </div>
             <div className="flex justify-between items-center gap-3">
-              <span className="text-slate-500">Saldo pendiente:</span>
+              <span className="text-slate-500">Pendiente del cliente:</span>
               <span
                 className={`font-bold font-mono ${
-                  caso.saldoPendiente > 0 ? 'text-amber-800' : 'text-emerald-700'
+                  caso.totalPendiente > 0 ? 'text-amber-800' : 'text-emerald-700'
                 }`}
               >
-                {formatBs(caso.saldoPendiente)}
+                {formatBs(caso.totalPendiente)}
               </span>
             </div>
+          </div>
           </div>
         </div>
 
@@ -234,7 +349,7 @@ export const CaseDetailPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">
-                    Cliente Patrocinado
+                    Cliente
                   </span>
                   <Link
                     to={`/clientes/${caso.clienteId}`}
@@ -246,7 +361,7 @@ export const CaseDetailPage: React.FC = () => {
 
                 <div>
                   <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">
-                    Participación Procesal
+                    Rol del cliente
                   </span>
                   <span className="font-semibold text-sm text-slate-900">
                     {caso.participacion}
@@ -255,14 +370,14 @@ export const CaseDetailPage: React.FC = () => {
 
                 <div>
                   <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">
-                    Área del Derecho
+                    Área
                   </span>
                   <AreaBadge area={caso.area} />
                 </div>
 
                 <div>
                   <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">
-                    Estado Actual
+                    Estado
                   </span>
                   <StatusBadge status={caso.estado} />
                 </div>
@@ -279,7 +394,7 @@ export const CaseDetailPage: React.FC = () => {
 
                 <div>
                   <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">
-                    Juzgado o Tribunal
+                    Juzgado / Tribunal
                   </span>
                   <span className="font-medium text-slate-800">
                     {caso.juzgadoTribunal || 'No radicado o no especificado'}
@@ -289,7 +404,7 @@ export const CaseDetailPage: React.FC = () => {
 
               <div>
                 <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-1 text-xs">
-                  Descripción y Objeto de la Causa
+                  Notas o resumen
                 </span>
                 <p className="text-xs sm:text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-100 leading-relaxed whitespace-pre-line">
                   {caso.descripcion}
@@ -381,13 +496,13 @@ export const CaseDetailPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-slate-50">
-                  <span className="text-slate-500">Saldo pendiente:</span>
+                  <span className="text-slate-500">Pendiente del cliente:</span>
                   <span
                     className={`font-mono font-bold ${
-                      caso.saldoPendiente > 0 ? 'text-amber-800' : 'text-slate-600'
+                      caso.totalPendiente > 0 ? 'text-amber-800' : 'text-slate-600'
                     }`}
                   >
-                    {formatBs(caso.saldoPendiente)}
+                    {formatBs(caso.totalPendiente)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-1">
@@ -471,7 +586,8 @@ export const CaseDetailPage: React.FC = () => {
               {caseEvents.map((ev) => (
                 <div
                   key={ev.id}
-                  className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:border-slate-300 transition-colors"
+                  id={`evento-${ev.id}`}
+                  className={`bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:border-slate-300 transition-colors ${highlightedEventId === ev.id ? 'ring-2 ring-brand-200 bg-brand-50/40' : ''}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
@@ -511,8 +627,14 @@ export const CaseDetailPage: React.FC = () => {
       {/* PESTAÑA 4: FINANZAS DEL CASO */}
       {activeTab === 'finanzas' && (
         <div className="space-y-6">
+          {financeSuccess && (
+            <div role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+              {financeSuccess}
+            </div>
+          )}
+          {financeError && <div role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{financeError}</div>}
           {/* Bloque 1: Honorarios del Caso (Honorarios acordados, Pagado, Saldo pendiente) */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -526,8 +648,8 @@ export const CaseDetailPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => setIsPaymentModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors shadow-xs"
+                onClick={() => { setFinanceSuccess(''); setSelectedPayment(undefined); setIsPaymentModalOpen(true); }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-900 rounded-md transition-colors shadow-xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>Registrar Pago</span>
@@ -535,12 +657,12 @@ export const CaseDetailPage: React.FC = () => {
             </div>
 
             {/* Tres datos solicitados en la consigna */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                 <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 block mb-1">
                   Honorarios Acordados
                 </span>
-                <span className="text-xl font-bold font-mono text-slate-900">
+                <span className="text-xl font-bold font-mono tabular-nums text-slate-900">
                   {formatBs(caso.honorariosAcordados)}
                 </span>
               </div>
@@ -549,19 +671,24 @@ export const CaseDetailPage: React.FC = () => {
                 <span className="text-[11px] uppercase tracking-wider font-semibold text-emerald-800 block mb-1">
                   Total Pagado
                 </span>
-                <span className="text-xl font-bold font-mono text-emerald-900">
+                <span className="text-xl font-bold font-mono tabular-nums text-emerald-900">
                   {formatBs(caso.totalPagado)}
                 </span>
               </div>
 
-              <div className="p-4 rounded-lg bg-amber-50 border border-amber-200">
-                <span className="text-[11px] uppercase tracking-wider font-semibold text-amber-800 block mb-1">
-                  Saldo Pendiente
+              <div className={`p-4 rounded-lg border ${caso.saldoPendiente === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                <span className={`text-[11px] uppercase tracking-wider font-semibold block mb-1 ${caso.saldoPendiente === 0 ? 'text-emerald-800' : 'text-amber-800'}`}>
+                  {caso.saldoPendiente === 0 ? '✓ Honorarios pagados' : 'Honorarios pendientes'}
                 </span>
-                <span className="text-xl font-bold font-mono text-amber-950">
-                  {formatBs(caso.saldoPendiente)}
+                <span className={`${caso.saldoPendiente === 0 ? 'text-sm text-emerald-900' : 'text-xl text-amber-950'} font-bold font-mono tabular-nums`}>
+                  {caso.saldoPendiente === 0 ? 'Sin saldo pendiente' : formatBs(caso.saldoPendiente)}
                 </span>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand-100 bg-brand-50/40 px-4 py-3 text-xs">
+              <span className="text-slate-700">Honorarios pendientes: <strong>{formatBs(caso.saldoPendiente)}</strong> · Gastos pendientes: <strong>{formatBs(caso.gastosPendientes)}</strong></span>
+              <span className="font-bold text-brand-900">Total pendiente del cliente: {formatBs(caso.totalPendiente)}</span>
             </div>
 
             {/* Historial de Pagos Parciales */}
@@ -572,29 +699,35 @@ export const CaseDetailPage: React.FC = () => {
 
               {casePayments.length === 0 ? (
                 <div className="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-slate-100">
-                  No se han registrado pagos para este caso todavía.
+                  No hay pagos registrados.
                 </div>
               ) : (
-                <div className="overflow-hidden border border-slate-200 rounded-lg">
-                  <table className="w-full text-left text-xs divide-y divide-slate-200">
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="mobile-data-table w-full md:min-w-[480px] text-left text-xs divide-y divide-slate-200">
                     <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider">
                       <tr>
                         <th className="px-4 py-2.5">Fecha</th>
                         <th className="px-4 py-2.5">Concepto / Nota</th>
                         <th className="px-4 py-2.5 text-right">Monto</th>
+                        <th className="px-2 py-2.5 text-right" aria-label="Acciones" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {casePayments.map((p) => (
                         <tr key={p.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-mono text-slate-700">
+                          <td className="px-4 py-3 font-mono text-slate-700 whitespace-nowrap">
                             {formatFecha(p.fecha)}
                           </td>
-                          <td className="px-4 py-3 text-slate-800">
+                          <td data-label="Concepto" className="px-4 py-3 text-slate-800">
                             {p.nota || 'Pago a cuenta de honorarios'}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-emerald-800">
+                          <td data-label="Monto" className="px-4 py-3 text-right font-mono font-bold tabular-nums whitespace-nowrap text-emerald-800">
                             {formatBs(p.monto)}
+                          </td>
+                          <td data-label="Acciones" className="px-2 py-2 text-right">
+                            <FinancialRowActions label={`pago de ${formatBs(p.monto)}`}
+                              onEdit={() => { setSelectedPayment(p); setIsPaymentModalOpen(true); setFinanceSuccess(''); }}
+                              onDelete={() => { setPendingDelete({ type: 'pago', id: p.id, monto: p.monto }); setFinanceError(''); }} />
                           </td>
                         </tr>
                       ))}
@@ -621,19 +754,10 @@ export const CaseDetailPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">
-                    Total Gastos
-                  </span>
-                  <span className="text-sm font-bold font-mono text-slate-800">
-                    {formatBs(caso.totalGastos)}
-                  </span>
-                </div>
-
                 <button
                   type="button"
-                  onClick={() => setIsExpenseModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-xs"
+                  onClick={() => { setFinanceSuccess(''); setSelectedExpense(undefined); setIsExpenseModalOpen(true); }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-900 rounded-md transition-colors shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Registrar Gasto</span>
@@ -641,35 +765,59 @@ export const CaseDetailPage: React.FC = () => {
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs">
+              <span>Gastos registrados: <strong className="font-mono">{formatBs(caso.totalGastos)}</strong></span>
+              <span>Reembolsables: <strong className="font-mono">{formatBs(caso.gastosReembolsables)}</strong></span>
+              <span>Reembolsados: <strong className="font-mono">{formatBs(caso.totalReembolsado)}</strong></span>
+              <span className={caso.gastosPendientes > 0 ? 'text-amber-800' : 'text-emerald-800'}>
+                {caso.gastosPendientes > 0
+                  ? <>Pendientes de reembolso: <strong className="font-mono">{formatBs(caso.gastosPendientes)}</strong></>
+                  : <strong>✓ {caso.gastosReembolsables > 0 ? 'Gastos reembolsados' : 'Sin gastos pendientes de reembolso'}</strong>}
+              </span>
+              {caso.gastosPendientes > 0 && <button type="button" onClick={() => { setSelectedReimbursement(undefined); setIsReimbursementModalOpen(true); setFinanceSuccess(''); }}
+                className="rounded-md border border-brand-300 bg-white px-3 py-1.5 font-semibold text-brand-900 hover:bg-brand-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-900">
+                Registrar reembolso
+              </button>}
+            </div>
+
             {caseExpenses.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-slate-100">
-                No hay gastos operativos registrados para este caso.
+                No hay gastos registrados.
               </div>
             ) : (
-              <div className="overflow-hidden border border-slate-200 rounded-lg">
-                <table className="w-full text-left text-xs divide-y divide-slate-200">
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="mobile-data-table w-full md:min-w-[580px] text-left text-xs divide-y divide-slate-200">
                   <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider">
                     <tr>
                       <th className="px-4 py-2.5">Fecha</th>
                       <th className="px-4 py-2.5">Concepto</th>
                       <th className="px-4 py-2.5">Justificante / Nota</th>
                       <th className="px-4 py-2.5 text-right">Monto</th>
+                      <th className="px-2 py-2.5 text-right" aria-label="Acciones" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {caseExpenses.map((g) => (
                       <tr key={g.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-slate-700">
+                        <td className="px-4 py-3 font-mono text-slate-700 whitespace-nowrap">
                           {formatFecha(g.fecha)}
                         </td>
-                        <td className="px-4 py-3 font-semibold text-slate-900">
-                          {g.concepto}
+                        <td data-label="Concepto" className="px-4 py-3 font-semibold text-slate-900">
+                          <div className="min-w-0">
+                            {g.concepto}
+                            <span className="block text-[10px] font-normal text-slate-500">{g.reembolsable === true ? 'Reembolsable' : 'No reembolsable'}</span>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-slate-500">
+                        <td data-label="Nota" className="px-4 py-3 text-slate-500">
                           {g.nota || '-'}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
+                        <td data-label="Monto" className="px-4 py-3 text-right font-mono font-bold tabular-nums whitespace-nowrap text-slate-800">
                           {formatBs(g.monto)}
+                        </td>
+                        <td data-label="Acciones" className="px-2 py-2 text-right">
+                          <FinancialRowActions label={`gasto de ${formatBs(g.monto)}`}
+                            onEdit={() => { setSelectedExpense(g); setIsExpenseModalOpen(true); setFinanceSuccess(''); }}
+                            onDelete={() => { setPendingDelete({ type: 'gasto', id: g.id, monto: g.monto }); setFinanceError(''); }} />
                         </td>
                       </tr>
                     ))}
@@ -677,11 +825,37 @@ export const CaseDetailPage: React.FC = () => {
                 </table>
               </div>
             )}
+
+            {caseReimbursements.length > 0 && <div>
+              <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-700">Reembolsos recibidos</h4>
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="mobile-data-table w-full md:min-w-[450px] text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 uppercase"><tr>
+                    <th className="px-4 py-2.5">Fecha</th><th className="px-4 py-2.5">Nota</th><th className="px-4 py-2.5 text-right">Monto</th><th className="px-2 py-2.5" aria-label="Acciones" />
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-100">{caseReimbursements.map((r) => <tr key={r.id}>
+                    <td className="px-4 py-3 whitespace-nowrap">{formatFecha(r.fecha)}</td>
+                    <td data-label="Nota" className="px-4 py-3">{r.nota || 'Reembolso de gastos'}</td>
+                    <td data-label="Monto" className="px-4 py-3 text-right font-mono font-bold text-emerald-800">{formatBs(r.monto)}</td>
+                    <td data-label="Acciones" className="px-2 py-2 text-right"><FinancialRowActions label={`reembolso de ${formatBs(r.monto)}`}
+                      onEdit={() => { setSelectedReimbursement(r); setIsReimbursementModalOpen(true); setFinanceSuccess(''); }}
+                      onDelete={() => { setPendingDelete({ type: 'reembolso', id: r.id, monto: r.monto }); setFinanceError(''); }} /></td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+            </div>}
           </div>
         </div>
       )}
 
       {/* Modales de Gestión de este caso */}
+      {isEditModalOpen && (
+        <CaseFormModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          caso={caso}
+        />
+      )}
       <ActivityFormModal
         isOpen={isActivityModalOpen}
         onClose={() => setIsActivityModalOpen(false)}
@@ -692,17 +866,40 @@ export const CaseDetailPage: React.FC = () => {
         onClose={() => setIsEventModalOpen(false)}
         preselectedCasoId={caso.id}
       />
-      <PaymentFormModal
+      {isPaymentModalOpen && <PaymentFormModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         casoId={caso.id}
         saldoPendiente={caso.saldoPendiente}
-      />
-      <ExpenseFormModal
+        pago={selectedPayment}
+        onSuccess={() => { setFinanceSuccess(selectedPayment ? 'Pago actualizado correctamente.' : 'Pago registrado correctamente.'); setSearchParams({ tab: 'finanzas' }); }}
+      />}
+      {isExpenseModalOpen && <ExpenseFormModal
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
         casoId={caso.id}
-      />
+        gasto={selectedExpense}
+        onSuccess={() => { setFinanceSuccess(selectedExpense ? 'Gasto actualizado correctamente.' : 'Gasto registrado correctamente.'); setSearchParams({ tab: 'finanzas' }); }}
+      />}
+      {isReimbursementModalOpen && <ReimbursementFormModal
+        casoId={caso.id}
+        reembolso={selectedReimbursement}
+        onClose={() => setIsReimbursementModalOpen(false)}
+        onSuccess={() => setFinanceSuccess(selectedReimbursement ? 'Reembolso actualizado correctamente.' : 'Reembolso registrado correctamente.')}
+      />}
+      {pendingDelete && <Modal isOpen title={`Eliminar ${pendingDelete.type}`} onClose={() => { if (!deletingRef.current) { setPendingDelete(null); setFinanceError(''); } }} maxWidth="sm">
+        <div className="space-y-4 text-sm text-slate-700">
+          <p>¿Eliminar este {pendingDelete.type} de <strong>{formatBs(pendingDelete.monto)}</strong>?</p>
+          <p>Los totales del caso se recalcularán automáticamente.</p>
+          {financeError && <p role="alert" className="rounded-md bg-rose-50 p-2 text-rose-800">{financeError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" disabled={deleting} onClick={() => { setPendingDelete(null); setFinanceError(''); }} className="rounded-md border border-slate-300 px-4 py-2 hover:bg-slate-50">Cancelar</button>
+            <button type="button" disabled={deleting} onClick={confirmDelete} className="rounded-md bg-rose-700 px-4 py-2 font-semibold text-white hover:bg-rose-800 disabled:opacity-50">
+              {deleting ? 'Eliminando...' : `Eliminar ${pendingDelete.type}`}
+            </button>
+          </div>
+        </div>
+      </Modal>}
     </div>
   );
 };

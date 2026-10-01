@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { StatCard } from '../components/common/StatCard';
 import { EventCard } from '../components/events/EventCard';
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const {
     cases,
     eventsWithCase,
@@ -88,15 +89,15 @@ export const DashboardPage: React.FC = () => {
     .slice(0, 5);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Encabezado y Accesos Rápidos */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             Panel de Control Jurídico
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Resumen operativo y agenda procesal del despacho
+          <p className="text-sm text-slate-500 mt-2">
+            Tu agenda y la actividad reciente del despacho
           </p>
         </div>
 
@@ -104,26 +105,26 @@ export const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsClientModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-xs"
+            className="inline-flex items-center gap-2 px-4 min-h-11 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-xs"
           >
-            <UserPlus className="w-3.5 h-3.5 text-slate-500" />
-            <span>Nuevo Cliente</span>
+            <UserPlus className="w-4 h-4" />
+            <span>Nuevo cliente</span>
           </button>
           <button
             type="button"
             onClick={() => setIsCaseModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-xs"
+            className="inline-flex items-center gap-2 px-4 min-h-11 py-2.5 text-sm font-semibold text-white bg-brand-900 border border-brand-900 rounded-md hover:bg-brand-800 transition-colors shadow-xs"
           >
-            <FilePlus className="w-3.5 h-3.5 text-slate-500" />
-            <span>Nuevo Caso</span>
+            <FilePlus className="w-4 h-4" />
+            <span>Nuevo caso</span>
           </button>
           <button
             type="button"
             onClick={() => setIsEventModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors shadow-xs"
+            className="inline-flex items-center gap-2 px-4 min-h-11 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-md transition-colors shadow-xs"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Agendar Evento</span>
+            <Plus className="w-4 h-4" />
+            <span>Agendar evento</span>
           </button>
         </div>
       </div>
@@ -131,32 +132,32 @@ export const DashboardPage: React.FC = () => {
       {/* Tarjetas Principales de Métricas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Casos Activos"
+          title="Casos activos"
+          compact
+          to="/casos?estado=activos"
           value={activeCasesCount}
-          subtitle={`De un total de ${cases.length} expedientes`}
           icon={<Briefcase className="w-5 h-5 text-brand-900" />}
         />
         <StatCard
-          title="Próximas Audiencias"
+          title="Audiencias"
+          compact
+          to="/agenda?filtro=audiencias"
           value={upcomingAudiencias}
-          subtitle="En señalamiento judicial"
-          icon={<Scale className="w-5 h-5 text-rose-700" />}
-          badge={upcomingAudiencias > 0 ? 'Atención' : undefined}
-          badgeType="warning"
+          icon={<Scale className="w-5 h-5 text-brand-900" />}
         />
         <StatCard
-          title="Próximos Plazos"
+          title="Plazos"
+          compact
+          to="/agenda?filtro=plazos"
           value={upcomingPlazos}
-          subtitle="Términos procesales por vencer"
-          icon={<Clock className="w-5 h-5 text-amber-700" />}
-          badge={upcomingPlazos > 0 ? 'Prioritario' : undefined}
-          badgeType="warning"
+          icon={<Clock className="w-5 h-5 text-brand-900" />}
         />
         <StatCard
-          title="Saldo Pendiente Total"
-          value={formatBs(financialTotals.saldoPendiente)}
-          subtitle={`Cobrado: ${formatBs(financialTotals.totalCobrado)}`}
-          icon={<Wallet className="w-5 h-5 text-emerald-700" />}
+          title="Por cobrar"
+          compact
+          to="/finanzas#saldos-pendientes"
+          value={formatBs(financialTotals.totalPendienteClientes)}
+          icon={<Wallet className="w-5 h-5 text-brand-900" />}
         />
       </div>
 
@@ -164,14 +165,14 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Columna Izquierda / Central: Próximos Eventos y Alertas Visuales (2 cols) */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-brand-900" />
-              <h2 className="text-base font-bold text-slate-900">PRÓXIMOS EVENTOS</h2>
+              <h2 className="text-xl font-bold text-slate-900">Próximos eventos</h2>
             </div>
             <Link
               to="/agenda"
-              className="text-xs font-semibold text-brand-900 hover:text-brand-700 flex items-center gap-1 hover:underline"
+              className="min-h-11 text-sm font-semibold text-brand-900 hover:text-brand-700 flex items-center gap-1 hover:underline"
             >
               <span>Ver agenda completa</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -185,7 +186,7 @@ export const DashboardPage: React.FC = () => {
               </div>
             ) : (
               proximosEventos.map((ev) => (
-                <EventCard key={ev.id} evento={ev} showCaseLink={true} />
+                <EventCard key={ev.id} evento={ev} showCaseLink={true} summary />
               ))
             )}
           </div>
@@ -193,39 +194,25 @@ export const DashboardPage: React.FC = () => {
 
         {/* Columna Derecha: Movimientos y Actividades Recientes (1 col) */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-brand-900" />
-              <h2 className="text-base font-bold text-slate-900">MOVIMIENTOS RECIENTES</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Actividad reciente</h2>
             </div>
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100 shadow-xs">
             {recientes.map((item) => (
-              <div key={item.id} className="p-3.5 hover:bg-slate-50/80 transition-colors">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-[11px] font-semibold text-brand-900 bg-brand-50 px-2 py-0.5 rounded border border-brand-100">
-                    {item.subtipo}
-                  </span>
-                  <span className="text-[11px] font-mono text-slate-400">
-                    {formatFecha(item.fecha)}
-                  </span>
-                </div>
-
-                <p className="text-xs font-medium text-slate-800 line-clamp-2 leading-snug">
-                  {item.titulo}
-                </p>
-
-                <div className="mt-2 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 truncate max-w-[170px]">
-                    {item.casoNombre}
-                  </span>
+              <div key={item.id} className="p-5 hover:bg-slate-50/80 transition-colors">
+                <p className="text-sm font-semibold text-slate-800">{item.subtipo}</p>
+                <p className="mt-1 text-sm text-slate-600 break-words">{item.casoNombre}</p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-slate-500">{formatFecha(item.fecha)}</span>
                   <Link
                     to={`/casos/${item.casoId}`}
-                    className="font-medium text-brand-900 hover:text-brand-700 hover:underline flex items-center gap-0.5"
+                    className="min-h-11 inline-flex items-center gap-1 px-2 text-sm font-semibold text-brand-900 hover:text-brand-700 hover:underline"
                   >
-                    <span>Expediente</span>
-                    <ArrowRight className="w-3 h-3" />
+                    <span>Ver caso →</span>
                   </Link>
                 </div>
               </div>
@@ -238,6 +225,7 @@ export const DashboardPage: React.FC = () => {
       <ClientFormModal
         isOpen={isClientModalOpen}
         onClose={() => setIsClientModalOpen(false)}
+        onSuccess={(clientId) => navigate(`/clientes/${clientId}`)}
       />
       <CaseFormModal
         isOpen={isCaseModalOpen}

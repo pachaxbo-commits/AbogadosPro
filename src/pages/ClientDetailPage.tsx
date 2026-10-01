@@ -3,25 +3,33 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
-import { formatBs, formatFecha } from '../services/formatters';
+import { ClientFormModal } from '../components/clients/ClientFormModal';
+import { EventFormModal } from '../components/events/EventFormModal';
+import { formatBs, formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import {
   Phone,
   Mail,
+  MapPin,
   Briefcase,
   Plus,
   ArrowLeft,
-  ChevronRight,
+  Calendar,
 } from 'lucide-react';
 
 export const ClientDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { clientsWithSummary, casesWithDetails } = useLegalData();
+  const { clientsWithSummary, casesWithDetails, eventsWithCase } = useLegalData();
 
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
 
   const cliente = clientsWithSummary.find((c) => c.id === id);
   const clienteCasos = casesWithDetails.filter((c) => c.clienteId === id);
+  const clienteCasoIds = new Set(clienteCasos.map((c) => c.id));
+  const hoyStr = getTodayIsoString();
+  const proximoEvento = eventsWithCase.find((event) => clienteCasoIds.has(event.casoId) && event.fecha >= hoyStr);
 
   if (!cliente) {
     return (
@@ -74,41 +82,48 @@ export const ClientDetailPage: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsCaseModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors shadow-xs shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Abrir Nuevo Caso</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button type="button" onClick={() => setIsEditModalOpen(true)} className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-md transition-colors">
+              Editar cliente
+            </button>
+            <button type="button" onClick={() => setIsCaseModalOpen(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors shadow-xs">
+              <Plus className="w-4 h-4" /> Nuevo caso
+            </button>
+            <button type="button" onClick={() => setIsEventModalOpen(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-md transition-colors">
+              <Plus className="w-4 h-4" /> Agendar evento
+            </button>
+          </div>
         </div>
 
         {/* Ficha de contacto y notas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 pt-6 border-t border-slate-100">
-          <div className="space-y-3">
+          {(cliente.telefono || cliente.correo || cliente.direccion) && <div className="space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Datos de Contacto
             </h4>
             <div className="space-y-2 text-xs text-slate-700">
-              <div className="flex items-center gap-2">
+              {cliente.telefono && <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-slate-400 shrink-0" />
                 <span className="font-medium">{cliente.telefono}</span>
-              </div>
-              <div className="flex items-center gap-2">
+              </div>}
+              {cliente.correo && <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-                <span>{cliente.correo || 'Sin correo registrado'}</span>
-              </div>
+                <span>{cliente.correo}</span>
+              </div>}
+              {cliente.direccion && <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>{cliente.direccion}</span>
+              </div>}
             </div>
-          </div>
+          </div>}
 
           <div className="space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Situación de Cartera
+              Resumen
             </h4>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-500">Expedientes totales:</span>
+                <span className="text-slate-500">Casos totales:</span>
                 <span className="font-semibold text-slate-800">{cliente.casosTotal}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
@@ -116,11 +131,14 @@ export const ClientDetailPage: React.FC = () => {
                 <span className="font-semibold text-emerald-700">{cliente.casosActivos}</span>
               </div>
               <div className="flex justify-between py-1">
-                <span className="text-slate-500">Deuda por honorarios:</span>
+                <span className="text-slate-500">Total pendiente:</span>
                 <span className="font-bold font-mono text-slate-900">
                   {formatBs(cliente.saldoPendienteTotal)}
                 </span>
               </div>
+              {cliente.gastosPendientesTotal > 0 && <div className="text-right text-[11px] text-slate-500">
+                Honorarios: {formatBs(cliente.honorariosPendientesTotal)} · Gastos: {formatBs(cliente.gastosPendientesTotal)}
+              </div>}
             </div>
           </div>
 
@@ -134,6 +152,19 @@ export const ClientDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <section className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <Calendar className="w-4 h-4 text-brand-900" /> Próximo evento
+        </h2>
+        {proximoEvento ? (
+          <div className="mt-2 space-y-1 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">{proximoEvento.tipo}: {proximoEvento.titulo}</p>
+            <p>{formatFecha(proximoEvento.fecha)}{proximoEvento.hora ? ` · ${formatHora(proximoEvento.hora)}` : ''}</p>
+            <p className="text-slate-500">{proximoEvento.casoNombre}</p>
+          </div>
+        ) : <p className="mt-2 text-sm text-slate-500">No hay eventos próximos</p>}
+      </section>
 
       {/* Lista de Casos Asociados */}
       <div className="space-y-3">
@@ -159,46 +190,41 @@ export const ClientDetailPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 gap-3">
             {clienteCasos.map((caso) => (
-              <div
+              <Link
                 key={caso.id}
-                onClick={() => navigate(`/casos/${caso.id}`)}
-                className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:border-brand-700/60 cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                to={`/casos/${caso.id}`}
+                className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:bg-brand-50/60 hover:border-brand-200 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-brand-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <AreaBadge area={caso.area} />
                     <StatusBadge status={caso.estado} />
-                    <JudicialIdBadge
-                      tipo={caso.tipoIdentificacionJudicial}
-                      numero={caso.numeroIdentificacionJudicial}
-                    />
+                    {caso.numeroIdentificacionJudicial && <JudicialIdBadge tipo={caso.tipoIdentificacionJudicial} numero={caso.numeroIdentificacionJudicial} />}
                   </div>
                   <h3 className="text-sm font-bold text-slate-900 hover:text-brand-900 transition-colors">
                     {caso.nombre}
                   </h3>
-                  <p className="text-xs text-slate-500 line-clamp-1">{caso.descripcion}</p>
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                   <div className="text-right">
                     <div className="text-[10px] uppercase font-semibold text-slate-400">
-                      Saldo
+                      Total pendiente
                     </div>
                     <div
                       className={`text-sm font-bold font-mono ${
-                        caso.saldoPendiente > 0 ? 'text-amber-800' : 'text-slate-600'
+                        caso.totalPendiente > 0 ? 'text-amber-800' : 'text-slate-600'
                       }`}
                     >
-                      {formatBs(caso.saldoPendiente)}
+                      {formatBs(caso.totalPendiente)}
                     </div>
                   </div>
 
                   <div className="flex items-center text-xs font-semibold text-brand-900 gap-1">
-                    <span>Ver expediente</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <span>Ver caso →</span>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -211,6 +237,12 @@ export const ClientDetailPage: React.FC = () => {
         preselectedClientId={cliente.id}
         onSuccess={(newCaseId) => navigate(`/casos/${newCaseId}`)}
       />
+      {isEditModalOpen && (
+        <ClientFormModal isOpen onClose={() => setIsEditModalOpen(false)} client={cliente} />
+      )}
+      {isEventModalOpen && (
+        <EventFormModal isOpen onClose={() => setIsEventModalOpen(false)} preselectedClientId={cliente.id} />
+      )}
     </div>
   );
 };

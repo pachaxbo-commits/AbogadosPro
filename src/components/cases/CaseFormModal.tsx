@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
-import { AreaCaso, EstadoCaso, ParticipacionCaso, TipoIdentificacionJudicial } from '../../types';
+import { AreaCaso, Caso, EstadoCaso, ParticipacionCaso, TipoIdentificacionJudicial } from '../../types';
 
 interface CaseFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   preselectedClientId?: string;
+  caso?: Caso;
   onSuccess?: (caseId: string) => void;
 }
 
@@ -14,25 +15,27 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
   isOpen,
   onClose,
   preselectedClientId,
+  caso,
   onSuccess,
 }) => {
-  const { clients, addCase } = useLegalData();
+  const { clients, addCase, updateCase } = useLegalData();
 
-  const [nombre, setNombre] = useState('');
-  const [clienteId, setClienteId] = useState(preselectedClientId || (clients[0]?.id || ''));
-  const [area, setArea] = useState<AreaCaso>('Civil');
-  const [estado, setEstado] = useState<EstadoCaso>('Activo');
-  const [participacion, setParticipacion] = useState<ParticipacionCaso>('Demandante');
-  const [tipoIdentificacionJudicial, setTipoIdentificacionJudicial] = useState<TipoIdentificacionJudicial>('NUREJ');
-  const [numeroIdentificacionJudicial, setNumeroIdentificacionJudicial] = useState('');
-  const [honorariosAcordados, setHonorariosAcordados] = useState<string>('');
-  const [juzgadoTribunal, setJuzgadoTribunal] = useState('');
-  const [descripcion, setDescripcion] = useState('');
+  const [nombre, setNombre] = useState(caso?.nombre || '');
+  const [clienteId, setClienteId] = useState(caso?.clienteId || preselectedClientId || (clients[0]?.id || ''));
+  const [area, setArea] = useState<AreaCaso>(caso?.area || 'Civil');
+  const [estado, setEstado] = useState<EstadoCaso>(caso?.estado || 'Activo');
+  const [participacion, setParticipacion] = useState<ParticipacionCaso>(caso?.participacion || 'Demandante');
+  const [tipoIdentificacionJudicial, setTipoIdentificacionJudicial] = useState<TipoIdentificacionJudicial>(caso?.tipoIdentificacionJudicial || 'NUREJ');
+  const [numeroIdentificacionJudicial, setNumeroIdentificacionJudicial] = useState(caso?.numeroIdentificacionJudicial || '');
+  const [honorariosAcordados, setHonorariosAcordados] = useState<string>(caso ? String(caso.honorariosAcordados) : '');
+  const [juzgadoTribunal, setJuzgadoTribunal] = useState(caso?.juzgadoTribunal || '');
+  const [descripcion, setDescripcion] = useState(caso?.descripcion || '');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const currentClientId = clienteId || preselectedClientId || (clients[0]?.id || '');
+  const currentTipoIdentificacion = tipoIdentificacionJudicial;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +48,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
       return;
     }
     if (!numeroIdentificacionJudicial.trim()) {
-      setError(`El número de ${tipoIdentificacionJudicial} es obligatorio`);
+      setError(`El número de ${currentTipoIdentificacion} es obligatorio`);
       return;
     }
 
@@ -58,31 +61,34 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
     try {
       setIsSubmitting(true);
       setError('');
-      const nuevo = await addCase({
+      const data = {
         nombre: nombre.trim(),
         clienteId: currentClientId,
         area,
         estado,
         participacion,
-        tipoIdentificacionJudicial,
+        tipoIdentificacionJudicial: currentTipoIdentificacion,
         numeroIdentificacionJudicial: numeroIdentificacionJudicial.trim(),
-        descripcion: descripcion.trim() || 'Sin descripción detallada.',
+        descripcion: caso ? descripcion.trim() : descripcion.trim() || 'Sin descripción detallada.',
         honorariosAcordados: feesNumber,
         juzgadoTribunal: juzgadoTribunal.trim() || undefined,
-      });
+      };
+      const guardado = caso ? await updateCase(caso.id, data) : await addCase(data);
 
       // Limpiar formulario
-      setNombre('');
-      setNumeroIdentificacionJudicial('');
-      setHonorariosAcordados('');
-      setJuzgadoTribunal('');
-      setDescripcion('');
+      if (!caso) {
+        setNombre('');
+        setNumeroIdentificacionJudicial('');
+        setHonorariosAcordados('');
+        setJuzgadoTribunal('');
+        setDescripcion('');
+      }
 
       onClose();
-      if (onSuccess) onSuccess(nuevo.id);
+      if (onSuccess) onSuccess(guardado.id);
     } catch (err) {
       console.error(err);
-      setError('Error al registrar el expediente');
+      setError(caso ? 'Error al actualizar el caso' : 'Error al registrar el expediente');
     } finally {
       setIsSubmitting(false);
     }
@@ -92,17 +98,19 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Nuevo Caso / Expediente"
-      subtitle="Apertura formal de expediente judicial o patrocinio extrajudicial"
+      title={caso ? 'Editar caso' : 'Nuevo Caso'}
+      subtitle={caso ? 'Modificar datos del caso' : 'Apertura formal de expediente judicial o patrocinio extrajudicial'}
       maxWidth="xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className={caso ? 'space-y-4' : 'space-y-3'}>
         {error && (
           <div className="p-3 text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-md">
             {error}
           </div>
         )}
 
+        <section className={caso ? 'space-y-4' : 'space-y-3'}>
+          {!caso && <h4 className="text-xs font-bold text-brand-900 border-b border-slate-100 pb-1.5">Datos del caso</h4>}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
             Carátula / Nombre del Caso <span className="text-rose-500">*</span>
@@ -117,7 +125,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${caso ? 'gap-4' : 'gap-3'}`}>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Cliente Asignado <span className="text-rose-500">*</span>
@@ -152,10 +160,10 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${caso ? 'gap-4' : 'gap-3'}`}>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-              Calidad de Participación <span className="text-rose-500">*</span>
+              Rol del cliente <span className="text-rose-500">*</span>
             </label>
             <select
               value={participacion}
@@ -174,7 +182,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-              Estado Inicial <span className="text-rose-500">*</span>
+              {caso ? 'Estado' : 'Estado Inicial'} <span className="text-rose-500">*</span>
             </label>
             <select
               value={estado}
@@ -188,14 +196,17 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
             </select>
           </div>
         </div>
+        </section>
 
         {/* NUREJ / CUD */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+        <section className={caso ? '' : 'space-y-2'}>
+          {!caso && <h4 className="text-xs font-bold text-brand-900 border-b border-slate-100 pb-1.5">Identificación judicial</h4>}
+        <div className={caso ? 'grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200' : 'grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200'}>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+            {caso && <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Identificación Judicial
-            </label>
-            <div className="flex gap-4 mt-2">
+            </label>}
+            <div className={caso ? 'flex gap-4 mt-2' : 'flex gap-4 sm:mt-7'}>
               <label className="inline-flex items-center text-xs font-medium text-slate-800 cursor-pointer">
                 <input
                   type="radio"
@@ -221,20 +232,23 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
 
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-              Número de {tipoIdentificacionJudicial} <span className="text-rose-500">*</span>
+              Número de {currentTipoIdentificacion} <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               required
               value={numeroIdentificacionJudicial}
               onChange={(e) => setNumeroIdentificacionJudicial(e.target.value)}
-              placeholder={tipoIdentificacionJudicial === 'NUREJ' ? 'Ej: 30123456' : 'Ej: 201102012300123'}
+              placeholder={currentTipoIdentificacion === 'NUREJ' ? 'Ej: 30123456' : 'Ej: 201102012300123'}
               className="w-full px-3 py-2 text-sm font-mono border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900 bg-white"
             />
           </div>
         </div>
+        </section>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <section className={caso ? 'space-y-4' : 'space-y-3'}>
+          {!caso && <h4 className="text-xs font-bold text-brand-900 border-b border-slate-100 pb-1.5">Información adicional</h4>}
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${caso ? 'gap-4' : 'gap-3'}`}>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Honorarios Acordados (Bs)
@@ -274,13 +288,14 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
             Descripción y Objeto de la Causa
           </label>
           <textarea
-            rows={3}
+            rows={caso ? 3 : 2}
             value={descripcion}
             onChange={(e) => setDescripcion(e.target.value)}
             placeholder="Resumen del objeto del proceso, hechos sustanciales o pretensión legal..."
             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
           />
         </div>
+        </section>
 
         <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button
@@ -295,7 +310,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
             disabled={isSubmitting}
             className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
           >
-            {isSubmitting ? 'Guardando...' : 'Crear Caso'}
+            {isSubmitting ? 'Guardando...' : caso ? 'Guardar cambios' : 'Crear Caso'}
           </button>
         </div>
       </form>

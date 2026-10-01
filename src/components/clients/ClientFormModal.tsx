@@ -1,24 +1,31 @@
 import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
+import { Cliente } from '../../types';
 
 interface ClientFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (clientId: string) => void;
+  client?: Cliente;
 }
 
 export const ClientFormModal: React.FC<ClientFormModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  client,
 }) => {
-  const { addClient } = useLegalData();
-  const [nombre, setNombre] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [correo, setCorreo] = useState('');
-  const [identificacion, setIdentificacion] = useState('');
-  const [notas, setNotas] = useState('');
+  const { addClient, updateClient } = useLegalData();
+  const [tipoCliente, setTipoCliente] = useState<'Persona' | 'Empresa' | ''>(
+    client?.tipoCliente || (client?.identificacion?.trim().toUpperCase().startsWith('NIT ') ? 'Empresa' : client?.identificacion?.trim().toUpperCase().startsWith('CI ') ? 'Persona' : '')
+  );
+  const [nombre, setNombre] = useState(client?.nombre || '');
+  const [telefono, setTelefono] = useState(client?.telefono || '');
+  const [correo, setCorreo] = useState(client?.correo || '');
+  const [identificacion, setIdentificacion] = useState(client?.identificacion || '');
+  const [direccion, setDireccion] = useState(client?.direccion || '');
+  const [notas, setNotas] = useState(client?.notas || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,34 +35,39 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
       setError('El nombre o razón social es obligatorio');
       return;
     }
-    if (!telefono.trim()) {
-      setError('El teléfono de contacto es obligatorio');
+    if (!tipoCliente) {
+      setError('Selecciona el tipo de cliente');
       return;
     }
 
     try {
       setIsSubmitting(true);
       setError('');
-      const nuevo = await addClient({
+      const data = {
+        tipoCliente,
         nombre: nombre.trim(),
         telefono: telefono.trim(),
         correo: correo.trim() || undefined,
         identificacion: identificacion.trim() || undefined,
+        direccion: direccion.trim() || undefined,
         notas: notas.trim() || undefined,
-      });
+      };
+      const saved = client ? await updateClient(client.id, data) : await addClient(data);
 
       // Limpiar formulario
       setNombre('');
+      setTipoCliente('');
       setTelefono('');
       setCorreo('');
       setIdentificacion('');
+      setDireccion('');
       setNotas('');
 
       onClose();
-      if (onSuccess) onSuccess(nuevo.id);
+      if (onSuccess) onSuccess(saved.id);
     } catch (err) {
       console.error(err);
-      setError('Ocurrió un error al registrar el cliente');
+      setError('Ocurrió un error al guardar el cliente');
     } finally {
       setIsSubmitting(false);
     }
@@ -65,8 +77,8 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Nuevo Cliente"
-      subtitle="Registrar nuevo cliente particular o institucional"
+      title={client ? 'Editar cliente' : 'Nuevo Cliente'}
+      subtitle={client ? undefined : 'Registrar nuevo cliente particular o institucional'}
       maxWidth="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -77,15 +89,32 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
         )}
 
         <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1" htmlFor="tipo-cliente">
+            Tipo de cliente <span className="text-rose-500">*</span>
+          </label>
+          <select
+            id="tipo-cliente"
+            required
+            value={tipoCliente}
+            onChange={(e) => setTipoCliente(e.target.value as 'Persona' | 'Empresa' | '')}
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
+          >
+            <option value="">Seleccionar tipo</option>
+            <option value="Persona">Persona</option>
+            <option value="Empresa">Empresa</option>
+          </select>
+        </div>
+
+        <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-            Nombre / Razón Social <span className="text-rose-500">*</span>
+            {tipoCliente === 'Persona' ? 'Nombre completo' : tipoCliente === 'Empresa' ? 'Razón social' : 'Nombre completo / Razón social'} <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
             required
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            placeholder="Ej: Lic. Marcelo Quiroga o Empresa S.A."
+            placeholder={tipoCliente === 'Persona' ? 'Ej: Marcelo Quiroga' : tipoCliente === 'Empresa' ? 'Ej: Empresa S.A.' : 'Nombre del cliente'}
             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
           />
         </div>
@@ -93,11 +122,10 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-              Teléfono / Celular <span className="text-rose-500">*</span>
+              Teléfono / Celular
             </label>
             <input
               type="text"
-              required
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               placeholder="Ej: +591 70012345"
@@ -107,13 +135,13 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-              Identificación (CI / NIT)
+              {tipoCliente === 'Persona' ? 'CI' : tipoCliente === 'Empresa' ? 'NIT' : 'CI / NIT'}
             </label>
             <input
               type="text"
               value={identificacion}
               onChange={(e) => setIdentificacion(e.target.value)}
-              placeholder="Ej: CI 4892011 SC o NIT"
+              placeholder={tipoCliente === 'Persona' ? 'Ej: CI 4892011 SC' : tipoCliente === 'Empresa' ? 'Ej: NIT 1029384751' : 'CI o NIT'}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
             />
           </div>
@@ -128,6 +156,18 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
             value={correo}
             onChange={(e) => setCorreo(e.target.value)}
             placeholder="cliente@ejemplo.bo"
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+            Dirección
+          </label>
+          <input
+            type="text"
+            value={direccion}
+            onChange={(e) => setDireccion(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
           />
         </div>
@@ -158,7 +198,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
             disabled={isSubmitting}
             className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
           >
-            {isSubmitting ? 'Guardando...' : 'Crear Cliente'}
+            {isSubmitting ? 'Guardando...' : client ? 'Guardar cambios' : 'Guardar cliente'}
           </button>
         </div>
       </form>

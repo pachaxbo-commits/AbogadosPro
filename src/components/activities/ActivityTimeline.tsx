@@ -68,7 +68,7 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
   if (sortedActivities.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-lg border border-dashed border-slate-200">
-        <p className="text-sm text-slate-500">No hay actuaciones registradas en este expediente.</p>
+        <p className="text-sm text-slate-500">No hay actividades registradas.</p>
         {onAddClick && (
           <button
             type="button"

@@ -1,36 +1,54 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
-import { formatFecha, formatHora } from '../services/formatters';
+import { formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import {
   Briefcase,
   Search,
   Filter,
   FilePlus,
   Calendar,
-  ChevronRight,
   User,
 } from 'lucide-react';
 
+type QuickFilter = 'Todos' | 'Activos';
+
+const normalizeSearch = (value: string) => value.toLowerCase().trim().replace(/\s+/g, ' ');
+
 export const CasesPage: React.FC = () => {
-  const { casesWithDetails } = useLegalData();
+  const { casesWithDetails, clients, eventsWithCase } = useLegalData();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedArea, setSelectedArea] = useState<string>('Todas');
   const [selectedEstado, setSelectedEstado] = useState<string>('Todos');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => searchParams.get('estado') === 'activos' ? 'Activos' : 'Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
+  const areas = [...new Set(['Civil', 'Penal', 'Familiar', 'Laboral', ...casesWithDetails.map((caso) => caso.area)])];
+  const today = getTodayIsoString();
+  const upcomingByCase = useMemo(() => {
+    const upcoming = new Map<string, (typeof eventsWithCase)[number]>();
+    for (const event of eventsWithCase) {
+      if (event.fecha >= today && !upcoming.has(event.casoId)) upcoming.set(event.casoId, event);
+    }
+    return upcoming;
+  }, [eventsWithCase, today]);
+
   const filteredCases = useMemo(() => {
+    const term = normalizeSearch(searchTerm);
+    const compactTerm = term.replace(/\s/g, '');
+    const phoneTerm = term.replace(/\D/g, '');
     return casesWithDetails.filter((caso) => {
-      // Búsqueda
-      const matchesSearch =
-        !searchTerm.trim() ||
-        caso.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        caso.clienteNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        caso.numeroIdentificacionJudicial.toLowerCase().includes(searchTerm.toLowerCase());
+      const client = clientMap.get(caso.clienteId);
+      const fields = [caso.nombre, caso.tipoIdentificacionJudicial, caso.numeroIdentificacionJudicial, caso.clienteNombre, client?.identificacion, client?.telefono, client?.correo];
+      const matchesSearch = !term || fields.some((field) => field && normalizeSearch(field).includes(term)) ||
+        (compactTerm && [caso.numeroIdentificacionJudicial, client?.identificacion].some((field) => field?.toLowerCase().replace(/\s/g, '').includes(compactTerm))) ||
+        (phoneTerm.length >= 4 && client?.telefono.replace(/\D/g, '').includes(phoneTerm));
 
       // Filtro Área
       const matchesArea =
@@ -38,11 +56,17 @@ export const CasesPage: React.FC = () => {
 
       // Filtro Estado
       const matchesEstado =
-        selectedEstado === 'Todos' || caso.estado === selectedEstado;
+        selectedEstado === 'Todos' ||
+        (selectedEstado === 'Activos'
+          ? caso.estado === 'Activo' || caso.estado === 'En trámite'
+          : caso.estado === selectedEstado);
 
-      return matchesSearch && matchesArea && matchesEstado;
+      const matchesQuickFilter = quickFilter === 'Todos' ||
+        (quickFilter === 'Activos' && (caso.estado === 'Activo' || caso.estado === 'En trámite'));
+
+      return matchesSearch && matchesArea && matchesEstado && matchesQuickFilter;
     });
-  }, [casesWithDetails, searchTerm, selectedArea, selectedEstado]);
+  }, [casesWithDetails, clientMap, searchTerm, selectedArea, selectedEstado, quickFilter]);
 
   return (
     <div className="space-y-6">
@@ -50,7 +74,7 @@ export const CasesPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Expedientes y Causas
+            Casos
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Control integral de procesos judiciales y arbitrales
@@ -76,7 +100,7 @@ export const CasesPage: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por carátula, NUREJ/CUD o cliente..."
+            placeholder="Buscar caso, cliente, CI, teléfono, NUREJ o CUD..."
             className="w-full py-1.5 text-sm bg-transparent focus:outline-hidden"
           />
           {searchTerm && (
@@ -102,10 +126,7 @@ export const CasesPage: React.FC = () => {
             className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-md bg-white text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
           >
             <option value="Todas">Todas las áreas</option>
-            <option value="Civil">Civil</option>
-            <option value="Penal">Penal</option>
-            <option value="Familiar">Familiar</option>
-            <option value="Laboral">Laboral</option>
+            {areas.map((area) => <option key={area} value={area}>{area}</option>)}
           </select>
 
           <select
@@ -114,18 +135,20 @@ export const CasesPage: React.FC = () => {
             className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-md bg-white text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
           >
             <option value="Todos">Todos los estados</option>
+            <option value="Activos">Activos (incluye en trámite)</option>
             <option value="Activo">Activo</option>
             <option value="En trámite">En trámite</option>
             <option value="En espera">En espera</option>
             <option value="Concluido">Concluido</option>
           </select>
 
-          {(selectedArea !== 'Todas' || selectedEstado !== 'Todos' || searchTerm) && (
+          {(selectedArea !== 'Todas' || selectedEstado !== 'Todos' || searchTerm || quickFilter !== 'Todos') && (
             <button
               onClick={() => {
                 setSelectedArea('Todas');
                 setSelectedEstado('Todos');
                 setSearchTerm('');
+                setQuickFilter('Todos');
               }}
               className="text-xs text-slate-500 hover:text-slate-800 underline px-1"
             >
@@ -135,11 +158,25 @@ export const CasesPage: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2" aria-label="Filtros rápidos de casos">
+        {(['Todos', 'Activos'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setQuickFilter(option)}
+            aria-pressed={quickFilter === option}
+            className={`px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors ${quickFilter === option ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-brand-50'}`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+
       {/* Lista / Tabla de Casos */}
       {filteredCases.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-slate-200 p-6">
           <Briefcase className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-700">No se encontraron expedientes</p>
+          <p className="text-sm font-semibold text-slate-700">{searchTerm || selectedArea !== 'Todas' || selectedEstado !== 'Todos' || quickFilter !== 'Todos' ? 'No se encontraron casos' : 'No hay casos registrados todavía.'}</p>
           <p className="text-xs text-slate-500 mt-1">
             Modifica los filtros seleccionados o abre un nuevo caso.
           </p>
@@ -147,14 +184,14 @@ export const CasesPage: React.FC = () => {
       ) : (
         <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm divide-y divide-slate-200">
+            <table className="mobile-data-table w-full text-left text-sm divide-y divide-slate-200">
               <thead className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
                 <tr>
                   <th scope="col" className="px-5 py-3.5">
-                    Expediente / Carátula
+                    Caso
                   </th>
                   <th scope="col" className="px-5 py-3.5">
-                    Cliente Patrocinado
+                    Cliente
                   </th>
                   <th scope="col" className="px-5 py-3.5">
                     Área / Estado
@@ -175,7 +212,11 @@ export const CasesPage: React.FC = () => {
                   <tr
                     key={caso.id}
                     onClick={() => navigate(`/casos/${caso.id}`)}
-                    className="hover:bg-slate-50/80 cursor-pointer transition-colors"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/casos/${caso.id}`); } }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Ver caso ${caso.nombre}`}
+                    className="hover:bg-brand-50/60 hover:outline hover:outline-1 hover:outline-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-4">
                       <div className="font-semibold text-slate-900 group-hover:text-brand-900">
@@ -186,39 +227,36 @@ export const CasesPage: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td data-label="Cliente" className="px-5 py-4">
                       <div className="flex items-center gap-1.5 text-xs text-slate-700">
                         <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="font-medium">{caso.clienteNombre}</span>
                       </div>
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td data-label="Área / Estado" className="px-5 py-4">
                       <div className="flex flex-col gap-1 items-start">
                         <AreaBadge area={caso.area} />
                         <StatusBadge status={caso.estado} />
                       </div>
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td data-label="Identificación" className="px-5 py-4">
                       <JudicialIdBadge
                         tipo={caso.tipoIdentificacionJudicial}
                         numero={caso.numeroIdentificacionJudicial}
                       />
                     </td>
 
-                    <td className="px-5 py-4">
-                      {caso.proximoEvento ? (
+                    <td data-label="Próximo evento" className="px-5 py-4 md:min-w-44">
+                      {upcomingByCase.get(caso.id) ? (
                         <div className="text-xs space-y-0.5">
-                          <div className="font-semibold text-slate-800 line-clamp-1">
-                            {caso.proximoEvento.tipo}: {caso.proximoEvento.titulo}
+                          <div className="font-semibold text-slate-800">
+                            {upcomingByCase.get(caso.id)?.tipo}
                           </div>
-                          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
-                            <Calendar className="w-3 h-3 text-slate-400" />
-                            <span>{formatFecha(caso.proximoEvento.fecha)}</span>
-                            {caso.proximoEvento.hora && (
-                              <span>· {formatHora(caso.proximoEvento.hora)}</span>
-                            )}
+                          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono whitespace-nowrap">
+                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{formatFecha(upcomingByCase.get(caso.id)?.fecha)}{upcomingByCase.get(caso.id)?.hora && ` · ${formatHora(upcomingByCase.get(caso.id)?.hora)}`}</span>
                           </div>
                         </div>
                       ) : (
@@ -226,10 +264,9 @@ export const CasesPage: React.FC = () => {
                       )}
                     </td>
 
-                    <td className="px-5 py-4 text-right">
-                      <span className="inline-flex items-center text-xs font-semibold text-brand-900">
-                        Abrir
-                        <ChevronRight className="w-4 h-4 ml-0.5" />
+                    <td data-label="Acción" className="px-5 py-4 text-right whitespace-nowrap">
+                      <span className="inline-flex items-center text-xs font-semibold text-brand-900 whitespace-nowrap">
+                        Ver caso →
                       </span>
                     </td>
                   </tr>

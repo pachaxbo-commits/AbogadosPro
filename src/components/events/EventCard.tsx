@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EventoConCaso } from '../../types';
 import { formatFecha, formatHora } from '../../services/formatters';
@@ -11,17 +11,26 @@ import {
   Briefcase,
   User,
   ArrowRight,
+  MoreHorizontal,
 } from 'lucide-react';
 
 interface EventCardProps {
   evento: EventoConCaso;
   showCaseLink?: boolean;
+  summary?: boolean;
+  onEdit?: () => void;
+  onComplete?: () => void;
 }
 
 export const EventCard: React.FC<EventCardProps> = ({
   evento,
   showCaseLink = true,
+  summary = false,
+  onEdit,
+  onComplete,
 }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const interactive = Boolean(onEdit);
   const getTipoStyle = (tipo: string) => {
     switch (tipo) {
       case 'Audiencia':
@@ -39,47 +48,77 @@ export const EventCard: React.FC<EventCardProps> = ({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:border-slate-300 transition-all ${getTipoStyle(
+      className={`bg-white rounded-lg border border-slate-200 shadow-xs hover:border-slate-300 transition-colors ${interactive ? 'relative hover:bg-brand-50/40 focus-within:ring-1 focus-within:ring-brand-200 cursor-pointer' : ''} ${summary ? 'p-5 border-l-4 border-l-brand-900' : 'p-4 ' + getTipoStyle(
         evento.tipo
       )}`}
     >
+      {interactive && <Link to={`/casos/${evento.casoId}?tab=agenda&evento=${encodeURIComponent(evento.id)}`} aria-label={`Ver evento ${evento.titulo} en la agenda del caso`} className="absolute inset-0 z-10 rounded-lg" />}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-xs tracking-wider uppercase text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
             {evento.tipo}
           </span>
-          <AreaBadge area={evento.casoArea} />
-          {evento.alertaVisual && <AlertBadge alerta={evento.alertaVisual} />}
+          {!summary && <AreaBadge area={evento.casoArea} />}
+          {interactive && evento.realizado ? (
+            <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Realizado</span>
+          ) : evento.alertaVisual && <AlertBadge alerta={evento.alertaVisual} />}
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-200 w-fit">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span className="font-semibold">{formatFecha(evento.fecha)}</span>
-          {evento.hora && (
-            <>
-              <Clock className="w-3.5 h-3.5 text-slate-400 ml-1" />
-              <span>{formatHora(evento.hora)}</span>
-            </>
+        <div className="flex items-center gap-2">
+          <div className={`flex flex-wrap items-center gap-2 text-slate-700 w-fit ${summary ? 'text-sm py-2' : 'text-xs font-mono bg-slate-50 px-2.5 py-1 rounded border border-slate-200'}`}>
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-semibold">{formatFecha(evento.fecha)}</span>
+            {evento.hora && (
+              <>
+                <Clock className="w-3.5 h-3.5 text-slate-400 ml-1" />
+                <span>{formatHora(evento.hora)}</span>
+              </>
+            )}
+          </div>
+          {interactive && (
+            <div className="relative z-20">
+              <button
+                type="button"
+                aria-label={`Acciones para ${evento.titulo}`}
+                aria-expanded={isMenuOpen}
+                onClick={() => setIsMenuOpen((open) => !open)}
+                className="p-1.5 rounded text-slate-500 hover:bg-slate-100 hover:text-brand-900"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+              {isMenuOpen && (
+                <div className="absolute right-0 z-30 mt-1 min-w-40 rounded-md border border-slate-200 bg-white py-1 shadow-sm">
+                  <button type="button" onClick={() => { setIsMenuOpen(false); onEdit?.(); }} className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-brand-50">
+                    Editar
+                  </button>
+                  {!evento.realizado && (
+                    <button type="button" onClick={() => { setIsMenuOpen(false); onComplete?.(); }} className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-brand-50">
+                      Marcar como realizado
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      <h3 className="text-sm font-semibold text-slate-900 mb-1">{evento.titulo}</h3>
+      <h3 className={`font-semibold text-slate-900 break-words ${summary ? 'text-base mb-4' : 'text-sm mb-1'}`}>{evento.titulo}</h3>
 
-      {evento.juzgado && (
+      {!summary && evento.juzgado && (
         <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2">
           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <span>{evento.juzgado}</span>
         </div>
       )}
 
-      {evento.descripcion && (
+      {!summary && evento.descripcion && (
         <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">
           {evento.descripcion}
         </p>
       )}
 
-      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div className={`pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 ${summary ? 'text-sm' : 'text-xs'}`}>
         <div className="flex flex-wrap items-center gap-3 text-slate-600">
           <div className="flex items-center gap-1">
             <Briefcase className="w-3.5 h-3.5 text-slate-400" />
@@ -91,15 +130,17 @@ export const EventCard: React.FC<EventCardProps> = ({
           </div>
         </div>
 
-        {showCaseLink && (
+        {showCaseLink && (interactive ? (
+          <Link to={`/casos/${evento.casoId}`} className="relative z-20 inline-flex items-center gap-1 font-semibold text-brand-900 hover:text-brand-700 hover:underline">Ver caso →</Link>
+        ) : (
           <Link
             to={`/casos/${evento.casoId}`}
-            className="inline-flex items-center gap-1 font-semibold text-brand-900 hover:text-brand-700 hover:underline"
+            className={`inline-flex items-center gap-1 font-semibold text-brand-900 hover:text-brand-700 hover:underline ${summary ? 'min-h-11 px-2' : ''}`}
           >
-            <span>Ver Expediente</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>{summary ? 'Ver caso →' : 'Ver Expediente'}</span>
+            {!summary && <ArrowRight className="w-3.5 h-3.5" />}
           </Link>
-        )}
+        ))}
       </div>
     </div>
   );
