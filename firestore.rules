@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Funciones auxiliares de autenticación y autorización
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         getUserDoc().role == 'admin')
+      );
+    }
+
+    function isInWorkspace(workspaceId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         getUserDoc().workspaceId == workspaceId)
+      );
+    }
+
+    // ==========================================
+    // Colección: users
+    // ==========================================
+    match /users/{userId} {
+      // Lectura permitida si el usuario es el dueño o es un administrador
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Creación permitida al auto-registrarse (rol obligatorio: user, tipo: free, billingExempt: false) o por admin
+      allow create: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.role == 'user' &&
+        request.resource.data.accountType == 'free' &&
+        request.resource.data.billingExempt == false &&
+        request.resource.data.workspaceId == userId
+      );
+
+      // Modificación permitida: un usuario no puede auto-ascender a admin ni cambiar su plan/billingExempt
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.accountType == resource.data.accountType &&
+        request.resource.data.plan == resource.data.plan &&
+        request.resource.data.billingExempt == resource.data.billingExempt &&
+        request.resource.data.workspaceId == resource.data.workspaceId
+      );
+
+      // Eliminación reservada exclusivamente para administradores
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // Colección: workspaces y sus subcolecciones
+    // ==========================================
+    match /workspaces/{workspaceId} {
+      // El abogado titular o el administrador pueden leer y gestionar el workspace
+      allow read: if isInWorkspace(workspaceId);
+      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == workspaceId);
+      allow update, delete: if isAdmin() || isInWorkspace(workspaceId);
+
+      // Subcolecciones aisladas de causas jurídicas
+      match /{subcollection}/{docId} {
+        allow read, write: if isInWorkspace(workspaceId);
+      }
+    }
+
+    // Por defecto, denegar cualquier acceso no especificado explícitamente
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

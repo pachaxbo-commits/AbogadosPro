@@ -1,24 +1,6 @@
-/**
- * AbogadosPro - Guía y configuración preparada para Backend en Firebase
- * 
- * NOTA DE ARQUITECTURA:
- * El proyecto está 100% desacoplado a través de `ILegalRepository`.
- * 
- * Para activar Firebase en el futuro:
- * 1. Instalar dependencias oficiales:
- *    npm install firebase
- * 
- * 2. Crear las variables en .env.local basándote en .env.example:
- *    VITE_FIREBASE_API_KEY=...
- *    VITE_FIREBASE_PROJECT_ID=...
- *    etc.
- * 
- * 3. Descomentar la inicialización a continuación e implementar
- *    `FirebaseLegalRepository` cumpliendo la interfaz `ILegalRepository`.
- * 
- * 4. Cambiar en `src/repositories/index.ts`:
- *    export const legalRepository: ILegalRepository = new FirebaseLegalRepository();
- */
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -33,6 +15,19 @@ export const isFirebaseConfigured = (): boolean => {
   return Boolean(
     firebaseConfig.apiKey &&
     firebaseConfig.projectId &&
-    firebaseConfig.apiKey !== 'tu_api_key_aqui'
+    firebaseConfig.apiKey !== 'tu_api_key_aqui' &&
+    !firebaseConfig.apiKey.includes('tu_api_key')
   );
 };
+
+// Inicialización de la aplicación Firebase (Singleton modular)
+let app: FirebaseApp;
+if (getApps().length > 0) {
+  app = getApp();
+} else {
+  app = initializeApp(firebaseConfig);
+}
+
+export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);
+export default app;

@@ -1,104 +1,130 @@
 # AbogadosPro
 
-Sistema demo de gestión jurídica y control de expedientes diseñado para abogados y despachos en Bolivia (con soporte conceptual para NUREJ, CUD y valores en Bolivianos `Bs`).
+Sistema integral de gestión jurídica, expedientes judiciales y control financiero diseñado para abogados y despachos legales en Bolivia (con soporte para identificadores NUREJ, CUD y valores en Bolivianos `Bs`).
 
-Esta versión proporciona la **base funcional y visual completa** (frontend), desacoplada y lista para conectar posteriormente un backend real (Firebase / REST API) sin reconstruir componentes ni vistas.
+Alojado en **Vercel** y conectado de forma nativa a **Firebase Authentication** y **Cloud Firestore** con estricto aislamiento de datos por *Workspace*.
 
 ---
 
-## 🛠️ Stack Utilizado
+## 🛠️ Stack Tecnológico
 
-- **Framework**: React 19 + TypeScript
+- **Frontend**: React 19 + TypeScript
 - **Bundler**: Vite
-- **Estilos**: Tailwind CSS
+- **Estilos**: Tailwind CSS (Identidad sobria, navy `#0f2744` y acentos ámbar)
 - **Iconografía**: Lucide React
 - **Enrutamiento**: React Router v7 (`react-router-dom`)
-- **Persistencia Demo**: Abstracción en repositorio local respaldado por `localStorage`
+- **Backend & Autenticación**:
+  - Firebase Authentication (Email y Contraseña, verificación y recuperación)
+  - Cloud Firestore (Persistencia en tiempo real estructurada por workspaces)
+  - Firebase Admin SDK (Vercel Serverless Functions para emisión segura de cuentas por administradores)
+- **Hosting**: Vercel (Producción y Preview)
 
 ---
 
-## 📋 Requisitos Previos
+## 🏛️ Arquitectura de Datos y Aislamiento por Workspace
 
-- **Node.js**: v18 o superior (probado en Node v24)
-- **NPM**: v9 o superior
-
----
-
-## 🚀 Instalación y Ejecución
-
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/pachaxbo-commits/AbogadosPro.git
-
-# 2. Ingresar a la carpeta del proyecto
-cd AbogadosPro
-
-# 3. Instalar dependencias
-npm install
-
-# 4. Iniciar servidor de desarrollo
-npm run dev
-```
-
-La aplicación estará disponible en: **`http://localhost:5173/`**
-
----
-
-## 📁 Estructura Principal del Proyecto
+Para garantizar confidencialidad jurídica absoluta entre diferentes despachos y abogados, el sistema implementa una arquitectura modular desacoplada:
 
 ```text
-src/
-├── types/                 # Modelos de dominio puros (Cliente, Caso, Actividad, Evento, Pago, Gasto)
-├── data/                  # Datos demo iniciales con fechas relativas dinámicas
-├── repositories/          # Capa de Abstracción de Datos
-│   ├── types.ts           # Interfaz ILegalRepository (contrato desacoplado)
-│   ├── localStorageRepo.ts# Implementación con persistencia y recuperación segura
-│   └── index.ts           # Inyección de dependencia singleton del repositorio
-├── services/
-│   ├── formatters.ts      # Utilidades de moneda (Bs), fechas y cálculo de alertas
-│   └── firebaseConfig.ts  # Guía y variables preparadas para conectar Firebase
-├── context/
-│   └── LegalDataContext.tsx # Estado global reactivo y consultas calculadas
-├── components/            # Componentes UI (Navbar, StatusBadge, StatCard, Modales, etc.)
-└── pages/                 # Páginas de la aplicación (Dashboard, Clientes, Casos, Agenda, Finanzas)
+users/{userId}                         -> Perfil de usuario (rol, plan, workspaceId, billingExempt)
+workspaces/{workspaceId}               -> Documento de metadatos del despacho
+  ├── clientes/{clienteId}             -> Cartera de clientes del workspace
+  ├── casos/{casoId}                   -> Expedientes del workspace
+  ├── actividades/{actividadId}        -> Actuaciones procesales y memoriales
+  ├── eventos/{eventoId}               -> Audiencias y plazos en agenda
+  ├── pagos/{pagoId}                   -> Cobro de honorarios profesionales
+  ├── gastos/{gastoId}                 -> Gastos y costas judiciales
+  └── reembolsos/{reembolsoId}         -> Liquidación de gastos devueltos por clientes
+```
+
+### Reglas de Seguridad (`firestore.rules`)
+- Ningún usuario puede consultar ni alterar datos pertenecientes a un `workspaceId` diferente al suyo.
+- Los usuarios con rol `user` no pueden auto-ascender a `admin` ni modificar campos de facturación (`billingExempt`, `plan`, `accountType`).
+- Los administradores (`role: 'admin'`) poseen supervisión de la colección de usuarios y pueden emitir cuentas especiales.
+
+---
+
+## 👥 Modalidades de Acceso y Planes
+
+1. **Modo Demostración Interactivo (Demo)**:
+   - Acceso sin registro desde la pantalla de login.
+   - Operación 100% aislada en `localStorage` mediante `DemoLegalRepository`.
+   - **Cero lecturas y cero escrituras en Cloud Firestore**.
+   - Incluye botón visible para restablecer los datos demo iniciales en cualquier momento.
+
+2. **Cuenta Gratuita (Free)**:
+   - Registro público y abierto desde `/registro`.
+   - Permite hasta **5 clientes** y **3 casos activos** para siempre sin costo.
+   - Enlace directo a contacto con PACHAX para escalamiento o desarrollo a medida.
+
+3. **Cuenta de Cortesía (Trial)**:
+   - Creada exclusivamente por un administrador desde `/admin`.
+   - Exenta de facturación (`billingExempt: true`).
+   - Sin restricciones del plan gratuito.
+   - **Cambio obligatorio de contraseña** (`mustChangePassword: true`) requerido en el primer inicio de sesión mediante un modal de seguridad.
+
+4. **Administrador (Superadmin)**:
+   - Acceso exclusivo al panel `/admin`.
+   - Métricas globales de usuarios (Free, Trial, Admin).
+   - Generación de cuentas de cortesía vía endpoint serverless seguro `/api/admin/users`.
+
+---
+
+## 🔑 Variables de Entorno
+
+Crear un archivo `.env.local` en la raíz del proyecto para desarrollo local:
+
+```env
+# Frontend (Firebase Web SDK)
+VITE_FIREBASE_API_KEY=AIzaSy...
+VITE_FIREBASE_AUTH_DOMAIN=abogadospro-fa495.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=abogadospro-fa495
+VITE_FIREBASE_STORAGE_BUCKET=abogadospro-fa495.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=844186423462
+VITE_FIREBASE_APP_ID=1:844186423462:web:e4dc53f053a8e41450e467
+
+# Backend Serverless (Vercel Functions - Firebase Admin SDK)
+FIREBASE_PROJECT_ID=abogadospro-fa495
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-...@abogadospro-fa495.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+> [!NOTE]
+> Las variables de entorno de cliente (`VITE_FIREBASE_*`) ya han sido configuradas en el proyecto Vercel para los entornos de **Producción** y **Preview**.
+
+---
+
+## 👨‍💻 Creación del Primer Usuario Administrador
+
+Dado que el registro público genera automáticamente cuentas con rol `user` y plan `free`, el primer administrador debe promoverse manualmente en la consola de Firebase:
+
+1. Ingrese a la [Consola de Firebase](https://console.firebase.google.com/) -> Proyecto **abogadospro-fa495**.
+2. Vaya a **Authentication** -> Cree el usuario o localice su UID.
+3. Vaya a **Firestore Database** -> Colección `users` -> Documento `{su_uid}`.
+4. Actualice los siguientes campos:
+   - `role`: `"admin"`
+   - `accountType`: `"admin"`
+   - `billingExempt`: `true`
+5. Inicie sesión en la aplicación; el enlace **Admin** aparecerá automáticamente en la barra superior.
+
+---
+
+## 🚀 Despliegue de Reglas e Índices de Firestore
+
+Para desplegar las reglas de seguridad e índices mediante Firebase CLI con su cuenta autorizada:
+
+```bash
+# Iniciar sesión con la cuenta propietaria del proyecto Firebase
+firebase login
+
+# Desplegar reglas de Firestore e índices
+firebase deploy --only firestore:rules,firestore:indexes
 ```
 
 ---
 
-## 🔌 Capa ILegalRepository (Preparación para Backend)
+## 💼 Desarrollo a Medida y Personalizaciones
 
-El frontend está completamente desacoplado de la fuente de datos mediante la interfaz `ILegalRepository` en `src/repositories/types.ts`:
-- Actualmente, la app utiliza `LocalStorageLegalRepository`.
-- **Para conectar Firebase o cualquier backend real en el futuro**, únicamente se debe crear un `FirebaseLegalRepository` que implemente dicha interfaz y sustituir la exportación en `src/repositories/index.ts`. Ningún componente o página requiere modificaciones.
-
-> [!NOTE]
-> **Estado del Backend**: Actualmente **NO** existe backend real ni base de datos remota conectada. Tampoco existe autenticación ni control de roles en esta fase.
-
----
-
-## 💾 Datos Demo y LocalStorage
-
-- **Datos iniciales**: Incluye 5 clientes y 8 casos con NUREJ y CUD ficticios (identificadores demo), eventos procesales, actuaciones y estados financieros coherentes.
-- **Fechas dinámicas**: Las fechas demo iniciales se calculan en relación a la fecha actual (`hoy`, `mañana`, `en 3 días`), garantizando que las alertas visuales del Dashboard siempre se mantengan vigentes al iniciar o reiniciar.
-- **Tolerancia a fallos**: Si los datos en `localStorage` se corrompen o quedan incompletos, el sistema se recupera automáticamente cargando los datos demo sin bloquear la pantalla.
-- **Cómo reiniciar los datos demo**: Puedes hacer clic en el botón **"Reiniciar Demo"** ubicado en el Navbar para restablecer la base de datos al estado original en cualquier momento.
-
----
-
-## 🗺️ Rutas Principales
-
-| Ruta | Descripción |
-| :--- | :--- |
-| `/` | **Inicio / Dashboard**: Métricas, alertas visuales, próximos eventos y movimientos. |
-| `/clientes` | **Clientes**: Cartera con buscador en tiempo real y saldos pendientes. |
-| `/clientes/:id` | **Ficha de Cliente**: Contacto, notas y expedientes asociados. |
-| `/casos` | **Casos**: Directorio general con filtros por área (*Civil, Penal, Familiar, Laboral*) y estado. |
-| `/casos/:id` | **Detalle de Caso**: Expediente completo con pestañas: `?tab=resumen`, `?tab=actividad`, `?tab=agenda`, `?tab=finanzas`. |
-| `/agenda` | **Agenda General**: Cronograma consolidado con filtros (*Hoy*, *Próximos*, *Audiencias*, *Plazos*, etc.). |
-| `/finanzas` | **Finanzas Generales**: Total acordado, cobrado, saldo pendiente, gastos y tabla de deudores. |
-
----
-
-## ☁️ Despliegue en Vercel
-
-El proyecto incluye [`vercel.json`](vercel.json) con reescrituras para enrutamiento SPA. Puedes importar el repositorio directamente en Vercel con un solo clic.
+**AbogadosPro** cuenta con el respaldo y desarrollo de **PACHAX**. Si su bufete, firma legal o institución requiere módulos especializados, flujos procesales específicos o integraciones locales a medida:
+- Sitio web: [https://pachax.net](https://pachax.net)
+- Contacto directo disponible en la pantalla de acceso del sistema.

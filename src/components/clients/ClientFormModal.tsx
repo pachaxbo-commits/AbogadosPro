@@ -65,9 +65,9 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
 
       onClose();
       if (onSuccess) onSuccess(saved.id);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      setError('Ocurrió un error al guardar el cliente');
+      setError(err instanceof Error ? err.message : 'Ocurrió un error al guardar el cliente');
     } finally {
       setIsSubmitting(false);
     }

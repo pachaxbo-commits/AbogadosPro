@@ -11,8 +11,10 @@ import {
   ClienteConResumen,
   EventoConCaso,
 } from '../types';
-import { legalRepository } from '../repositories';
+import { ILegalRepository, demoLegalRepository, FirestoreLegalRepository } from '../repositories';
 import { calcularAlertaVisual } from '../services/formatters';
+import { useAuth } from './AuthContext';
+import { canCreateClient, canCreateCase } from '../config/plans';
 
 interface LegalDataContextType {
   clients: Cliente[];
@@ -63,6 +65,8 @@ interface LegalDataContextType {
 const LegalDataContext = createContext<LegalDataContextType | undefined>(undefined);
 
 export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser, userProfile, isDemo, loading: authLoading } = useAuth();
+
   const [clients, setClients] = useState<Cliente[]>([]);
   const [cases, setCases] = useState<Caso[]>([]);
   const [activities, setActivities] = useState<Actividad[]>([]);
@@ -72,17 +76,43 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [reimbursements, setReimbursements] = useState<Reembolso[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
+  const workspaceId = userProfile?.workspaceId;
+
+  // Instancia activa del repositorio: Firestore por workspace si está autenticado, Demo si no.
+  const activeRepository: ILegalRepository = useMemo(() => {
+    if (currentUser && workspaceId) {
+      return new FirestoreLegalRepository(workspaceId);
+    }
+    return demoLegalRepository;
+  }, [currentUser, workspaceId]);
+
   const loadAll = useCallback(async () => {
+    // Si aún está resolviendo auth, esperar
+    if (authLoading) return;
+
+    // Si no está autenticado ni en modo demo, no cargar datos demo
+    if (!currentUser && !isDemo) {
+      setClients([]);
+      setCases([]);
+      setActivities([]);
+      setEvents([]);
+      setPayments([]);
+      setExpenses([]);
+      setReimbursements([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const [c, cs, a, e, p, ex, re] = await Promise.all([
-        legalRepository.getClients(),
-        legalRepository.getCases(),
-        legalRepository.getActivities(),
-        legalRepository.getEvents(),
-        legalRepository.getPayments(),
-        legalRepository.getExpenses(),
-        legalRepository.getReimbursements(),
+        activeRepository.getClients(),
+        activeRepository.getCases(),
+        activeRepository.getActivities(),
+        activeRepository.getEvents(),
+        activeRepository.getPayments(),
+        activeRepository.getExpenses(),
+        activeRepository.getReimbursements(),
       ]);
       setClients(c);
       setCases(cs);
@@ -96,108 +126,124 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeRepository, authLoading, currentUser, isDemo]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
-  // Acciones
+  // Acciones de inserción y modificación con validación de límites de plan
   const addClient = async (data: Omit<Cliente, 'id' | 'fechaRegistro'>): Promise<Cliente> => {
-    const created = await legalRepository.addClient(data);
+    if (!isDemo && currentUser) {
+      const validation = canCreateClient(userProfile, clients.length);
+      if (!validation.allowed) {
+        throw new Error(validation.reason || 'Límite de clientes alcanzado en su plan.');
+      }
+    }
+    const created = await activeRepository.addClient(data);
     setClients((prev) => [created, ...prev]);
     return created;
   };
 
   const updateClient = async (id: string, data: Omit<Cliente, 'id' | 'fechaRegistro'>): Promise<Cliente> => {
-    const updated = await legalRepository.updateClient(id, data);
+    const updated = await activeRepository.updateClient(id, data);
     setClients((prev) => prev.map((client) => client.id === id ? updated : client));
     return updated;
   };
 
   const addCase = async (data: Omit<Caso, 'id' | 'fechaCreacion'>): Promise<Caso> => {
-    const created = await legalRepository.addCase(data);
+    if (!isDemo && currentUser) {
+      const validation = canCreateCase(userProfile, cases.length);
+      if (!validation.allowed) {
+        throw new Error(validation.reason || 'Límite de casos alcanzado en su plan.');
+      }
+    }
+    const created = await activeRepository.addCase(data);
     setCases((prev) => [created, ...prev]);
     return created;
   };
 
   const updateCase = async (id: string, data: Omit<Caso, 'id' | 'fechaCreacion'>): Promise<Caso> => {
-    const updated = await legalRepository.updateCase(id, data);
+    const updated = await activeRepository.updateCase(id, data);
     setCases((prev) => prev.map((caso) => caso.id === id ? updated : caso));
     return updated;
   };
 
   const addActivity = async (data: Omit<Actividad, 'id'>): Promise<Actividad> => {
-    const created = await legalRepository.addActivity(data);
+    const created = await activeRepository.addActivity(data);
     setActivities((prev) => [created, ...prev]);
     return created;
   };
 
   const addEvent = async (data: Omit<Evento, 'id'>): Promise<Evento> => {
-    const created = await legalRepository.addEvent(data);
+    const created = await activeRepository.addEvent(data);
     setEvents((prev) => [created, ...prev]);
     return created;
   };
 
   const updateEvent = async (id: string, data: Omit<Evento, 'id'>): Promise<Evento> => {
-    const updated = await legalRepository.updateEvent(id, data);
+    const updated = await activeRepository.updateEvent(id, data);
     setEvents((prev) => prev.map((evento) => evento.id === id ? updated : evento));
     return updated;
   };
 
   const addPayment = async (data: Omit<Pago, 'id'>): Promise<Pago> => {
-    const created = await legalRepository.addPayment(data);
+    const created = await activeRepository.addPayment(data);
     setPayments((prev) => [created, ...prev]);
     return created;
   };
 
   const updatePayment = async (id: string, data: Omit<Pago, 'id'>): Promise<Pago> => {
-    const updated = await legalRepository.updatePayment(id, data);
+    const updated = await activeRepository.updatePayment(id, data);
     setPayments((prev) => prev.map((item) => item.id === id ? updated : item));
     return updated;
   };
 
   const deletePayment = async (id: string): Promise<void> => {
-    await legalRepository.deletePayment(id);
+    await activeRepository.deletePayment(id);
     setPayments((prev) => prev.filter((item) => item.id !== id));
   };
 
   const addExpense = async (data: Omit<Gasto, 'id'>): Promise<Gasto> => {
-    const created = await legalRepository.addExpense(data);
+    const created = await activeRepository.addExpense(data);
     setExpenses((prev) => [created, ...prev]);
     return created;
   };
 
   const updateExpense = async (id: string, data: Omit<Gasto, 'id'>): Promise<Gasto> => {
-    const updated = await legalRepository.updateExpense(id, data);
+    const updated = await activeRepository.updateExpense(id, data);
     setExpenses((prev) => prev.map((item) => item.id === id ? updated : item));
     return updated;
   };
 
   const deleteExpense = async (id: string): Promise<void> => {
-    await legalRepository.deleteExpense(id);
+    await activeRepository.deleteExpense(id);
     setExpenses((prev) => prev.filter((item) => item.id !== id));
   };
 
   const addReimbursement = async (data: Omit<Reembolso, 'id'>): Promise<Reembolso> => {
-    const created = await legalRepository.addReimbursement(data);
+    const created = await activeRepository.addReimbursement(data);
     setReimbursements((prev) => [created, ...prev]);
     return created;
   };
 
   const updateReimbursement = async (id: string, data: Omit<Reembolso, 'id'>): Promise<Reembolso> => {
-    const updated = await legalRepository.updateReimbursement(id, data);
+    const updated = await activeRepository.updateReimbursement(id, data);
     setReimbursements((prev) => prev.map((item) => item.id === id ? updated : item));
     return updated;
   };
 
   const deleteReimbursement = async (id: string): Promise<void> => {
-    await legalRepository.deleteReimbursement(id);
+    await activeRepository.deleteReimbursement(id);
     setReimbursements((prev) => prev.filter((item) => item.id !== id));
   };
 
   const resetDemoData = async (): Promise<void> => {
-    await legalRepository.resetToInitial();
+    if (!isDemo) {
+      console.warn('El restablecimiento de datos está reservado exclusivamente para el Modo Demo.');
+      return;
+    }
+    await demoLegalRepository.resetToInitial();
     await loadAll();
   };
 
