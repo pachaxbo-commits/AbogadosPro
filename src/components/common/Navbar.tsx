@@ -41,16 +41,16 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="bg-brand-900 border-b border-brand-950 text-white sticky top-0 z-40 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand */}
           <div className="flex items-center gap-3">
             <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-lg bg-brand-800 border border-brand-700/60 flex items-center justify-center text-slate-100 group-hover:bg-brand-700 transition-colors">
+              <div className="hidden min-[360px]:flex w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-lg bg-brand-800 border border-brand-700/60 items-center justify-center text-slate-100 group-hover:bg-brand-700 transition-colors">
                 <Scale className="w-5 h-5 text-amber-300" />
               </div>
               <div className="flex flex-col">
-                <span className="font-serif text-xl font-bold tracking-tight text-white leading-none">
+                <span className="font-serif text-lg sm:text-xl font-bold tracking-tight text-white leading-none">
                   Abogados<span className="text-amber-300 font-sans font-semibold">Pro</span>
                 </span>
                 <span className="text-[10px] text-slate-300 tracking-wider uppercase font-medium mt-0.5">
@@ -89,7 +89,7 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Action */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-0 sm:gap-2">
             <TaskNotifications />
             <ProfileMenu />
             <button

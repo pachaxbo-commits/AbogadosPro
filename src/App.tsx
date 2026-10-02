@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useLayoutEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LegalDataProvider } from './context/LegalDataContext';
 import { Navbar } from './components/common/Navbar';
 import { DashboardPage } from './pages/DashboardPage';
@@ -13,11 +13,20 @@ import { TasksPage } from './pages/TasksPage';
 import { ProfileProvider } from './context/ProfileContext';
 import { ProfilePage } from './pages/ProfilePage';
 
+function MobileNavigationPosition() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    if (window.matchMedia('(max-width: 767px)').matches) window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <LegalDataProvider>
       <ProfileProvider>
       <BrowserRouter>
+        <MobileNavigationPosition />
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-brand-100 selection:text-brand-900">
           <Navbar />
 

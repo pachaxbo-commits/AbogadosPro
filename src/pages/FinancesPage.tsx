@@ -147,7 +147,7 @@ export const FinancesPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* SECCIÓN 1: SALDOS PENDIENTES (2 columnas) */}
         {isCasesView && <div id="saldos-pendientes" className={`${selectedMetric ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-4 scroll-mt-28`}>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-base font-bold text-slate-900">
               {selectedMetric === 'acordado' ? 'HONORARIOS ACORDADOS' : 'TOTAL PENDIENTE'} POR CASO ({visibleCases.length})
             </h2>
@@ -195,7 +195,7 @@ export const FinancesPage: React.FC = () => {
                           <div className="font-semibold text-slate-900 line-clamp-1">
                             {caso.nombre}
                           </div>
-                          <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+                          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
                             <span>{caso.clienteNombre}</span>
                             <span>•</span>
                             <span className="font-mono">{caso.tipoIdentificacionJudicial}: {caso.numeroIdentificacionJudicial}</span>

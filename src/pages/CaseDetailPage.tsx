@@ -204,7 +204,7 @@ export const CaseDetailPage: React.FC = () => {
             )}
 
             <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-slate-400" />
                 <span>Cliente:</span>
                 <Link

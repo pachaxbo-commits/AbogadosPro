@@ -40,7 +40,7 @@ function ProfileEditor({ onClose }: { onClose: () => void }) {
     finally { guard.current = false; setBusy(false); }
   }}>
     {error && <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
-    <div className="flex flex-wrap items-center gap-5 rounded-lg border border-brand-100 bg-brand-50 p-5"><ProfileAvatar name={draft.nombre} url={preview || photoUrl} large /><div className="min-w-0 flex-1">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-5 rounded-lg border border-brand-100 bg-brand-50 p-5"><ProfileAvatar name={draft.nombre} url={preview || photoUrl} large /><div className="min-w-0 w-full sm:w-auto sm:flex-1">
       <h2 className="mb-1 text-xl font-bold text-brand-900">{draft.nombre.trim() || 'Tu perfil profesional'}</h2>
       {(draft.especialidad || draft.estudio) && <p className="mb-3 text-sm text-slate-600">{[draft.especialidad, draft.estudio].filter(Boolean).join(' · ')}</p>}
       <label htmlFor="profile-photo" className="block text-sm font-semibold text-slate-700">Foto de perfil</label>
