@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { initializeApp, getApps, getApp, cert, type App } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import admin from 'firebase-admin';
 
 function getCleanPrivateKey(rawKey?: string): string | undefined {
   if (!rawKey) return undefined;
@@ -12,9 +10,9 @@ function getCleanPrivateKey(rawKey?: string): string | undefined {
   return key.replace(/\\n/g, '\n');
 }
 
-function initAdmin(): App {
-  if (getApps().length > 0) {
-    return getApp();
+function initAdmin(): admin.app.App {
+  if (admin.apps.length > 0) {
+    return admin.app();
   }
 
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'abogadospro-fa495';
@@ -23,20 +21,20 @@ function initAdmin(): App {
 
   if (clientEmail && privateKey) {
     try {
-      return initializeApp({
-        credential: cert({
+      return admin.initializeApp({
+        credential: admin.credential.cert({
           projectId,
           clientEmail,
           privateKey,
         }),
       });
     } catch (certErr) {
-      console.error('Error inicializando cert():', certErr);
+      console.error('Error inicializando admin.credential.cert:', certErr);
       throw new Error(`Fallo en cert(): ${certErr instanceof Error ? certErr.message : String(certErr)}`);
     }
   }
 
-  return initializeApp({
+  return admin.initializeApp({
     projectId,
   });
 }
@@ -54,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         body = JSON.parse(body);
       } catch {
-        // Fallback si no es JSON válido
+        // Ignorar si no es JSON
       }
     }
 
@@ -65,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Acceso no autorizado para bootstrap.' });
     }
 
-    let adminApp: App;
+    let adminApp: admin.app.App;
     try {
       adminApp = initAdmin();
     } catch (initErr) {
@@ -74,8 +72,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const auth = getAuth(adminApp);
-    const firestore = getFirestore(adminApp);
+    const auth = adminApp.auth();
+    const firestore = adminApp.firestore();
 
     // Buscar usuario en Firebase Authentication
     let userRecord;

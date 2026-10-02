@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { initializeApp, getApps, getApp, cert, type App } from 'firebase-admin/app';
-import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import admin from 'firebase-admin';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -14,9 +12,9 @@ function getCleanPrivateKey(rawKey?: string): string | undefined {
   return key.replace(/\\n/g, '\n');
 }
 
-function initAdmin(): App {
-  if (getApps().length > 0) {
-    return getApp();
+function initAdmin(): admin.app.App {
+  if (admin.apps.length > 0) {
+    return admin.app();
   }
 
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'abogadospro-fa495';
@@ -24,8 +22,8 @@ function initAdmin(): App {
   const privateKey = getCleanPrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY);
 
   if (clientEmail && privateKey) {
-    return initializeApp({
-      credential: cert({
+    return admin.initializeApp({
+      credential: admin.credential.cert({
         projectId,
         clientEmail,
         privateKey,
@@ -34,7 +32,7 @@ function initAdmin(): App {
   }
 
   // Inicialización por defecto en caso de disponer de Application Default Credentials
-  return initializeApp({
+  return admin.initializeApp({
     projectId,
   });
 }
@@ -80,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 4. Inicialización segura de Firebase Admin SDK
-  let adminApp: App;
+  let adminApp: admin.app.App;
   try {
     adminApp = initAdmin();
   } catch (initErr) {
@@ -90,11 +88,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const auth = getAuth(adminApp);
-  const firestore = getFirestore(adminApp);
+  const auth = adminApp.auth();
+  const firestore = adminApp.firestore();
 
   // 5. Verificación criptográfica del ID Token
-  let decodedToken: DecodedIdToken;
+  let decodedToken: admin.auth.DecodedIdToken;
   try {
     decodedToken = await auth.verifyIdToken(idToken);
   } catch {
