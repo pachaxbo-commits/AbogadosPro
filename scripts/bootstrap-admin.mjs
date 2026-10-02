@@ -97,7 +97,7 @@ Configure las siguientes variables en su archivo .env.local o entorno:
     } else {
       userRecord = await auth.getUser(targetUid);
     }
-  } catch (_err) {
+  } catch {
     console.error(`Error: No se encontró ningún usuario registrado en Authentication con ${targetEmail ? `email ${targetEmail}` : `UID ${targetUid}`}`);
     process.exit(1);
   }

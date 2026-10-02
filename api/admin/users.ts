@@ -1,11 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, getApp, cert, type App } from 'firebase-admin/app';
+import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function initAdmin(): admin.app.App {
-  if (admin.apps.length > 0) {
-    return admin.app();
+function initAdmin(): App {
+  if (getApps().length > 0) {
+    return getApp();
   }
 
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'abogadospro-fa495';
@@ -14,8 +16,8 @@ function initAdmin(): admin.app.App {
   const privateKey = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined;
 
   if (clientEmail && privateKey) {
-    return admin.initializeApp({
-      credential: admin.credential.cert({
+    return initializeApp({
+      credential: cert({
         projectId,
         clientEmail,
         privateKey,
@@ -23,8 +25,8 @@ function initAdmin(): admin.app.App {
     });
   }
 
-  // Inicialización alternativa para entornos con Application Default Credentials
-  return admin.initializeApp({
+  // Inicialización por defecto en caso de disponer de Application Default Credentials
+  return initializeApp({
     projectId,
   });
 }
@@ -46,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Token de sesión vacío.' });
   }
 
-  // 3. Validación de Payload antes de invocar operaciones de base de datos
+  // 3. Validación de Payload antes de invocar operaciones
   const { email, password, displayName, studioName } = req.body || {};
 
   if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
@@ -62,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 4. Inicialización segura de Firebase Admin SDK
-  let adminApp: admin.app.App;
+  let adminApp: App;
   try {
     adminApp = initAdmin();
   } catch (initErr) {
@@ -72,17 +74,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  const auth = getAuth(adminApp);
+  const firestore = getFirestore(adminApp);
+
   // 5. Verificación criptográfica del ID Token
-  let decodedToken: admin.auth.DecodedIdToken;
+  let decodedToken: DecodedIdToken;
   try {
-    decodedToken = await adminApp.auth().verifyIdToken(idToken);
+    decodedToken = await auth.verifyIdToken(idToken);
   } catch {
     return res.status(401).json({ error: 'Token de sesión expirado o inválido.' });
   }
 
   // 6. Verificación de permisos de Administrador en Firestore (Server-side)
   const callerUid = decodedToken.uid;
-  const firestore = adminApp.firestore();
 
   try {
     const callerDoc = await firestore.collection('users').doc(callerUid).get();
@@ -103,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // 7.1 Crear usuario en Firebase Auth sin afectar la sesión del admin
-    const userRecord = await adminApp.auth().createUser({
+    const userRecord = await auth.createUser({
       email: normalizedEmail,
       password,
       displayName: cleanDisplayName,
@@ -153,7 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Rollback: Si se creó el Auth User pero falló Firestore, eliminar Auth User
     if (createdAuthUid) {
       try {
-        await adminApp.auth().deleteUser(createdAuthUid);
+        await auth.deleteUser(createdAuthUid);
         console.warn(`Rollback completado: usuario ${createdAuthUid} eliminado de Auth tras fallo en Firestore.`);
       } catch (rollbackError) {
         console.error(`Error crítico en rollback de usuario ${createdAuthUid}:`, rollbackError);
