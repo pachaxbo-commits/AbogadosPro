@@ -54,7 +54,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Token de sesión vacío.' });
   }
 
-  // 3. Validación de Payload antes de invocar operaciones
+  // 3. Inicialización segura de Firebase Admin SDK
+  let adminApp: admin.app.App;
+  try {
+    adminApp = initAdmin();
+  } catch (initErr) {
+    console.error('Error al inicializar Firebase Admin:', initErr);
+    return res.status(500).json({
+      error: 'Credenciales de servicio administrativo de Firebase no configuradas en el servidor.',
+    });
+  }
+
+  const auth = adminApp.auth();
+  const firestore = adminApp.firestore();
+
+  // 4. Verificación criptográfica del ID Token
+  let decodedToken: admin.auth.DecodedIdToken;
+  try {
+    decodedToken = await auth.verifyIdToken(idToken);
+  } catch {
+    return res.status(401).json({ error: 'Token de sesión expirado o inválido.' });
+  }
+
+  // 5. Verificación de permisos de Administrador en Firestore (Server-side)
+  const callerUid = decodedToken.uid;
+
+  try {
+    const callerDoc = await firestore.collection('users').doc(callerUid).get();
+    if (!callerDoc.exists || callerDoc.data()?.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado: solo los administradores pueden emitir cuentas de cortesía.' });
+    }
+  } catch (fsErr) {
+    console.error('Error al consultar permisos de administrador en Firestore:', fsErr);
+    return res.status(500).json({ error: 'Error al verificar privilegios administrativos.' });
+  }
+
+  // 6. Validación de Payload antes de invocar operaciones
   let body = req.body;
   if (typeof body === 'string') {
     try {
@@ -75,41 +110,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!password || typeof password !== 'string' || password.length < 6) {
     return res.status(400).json({ error: 'La contraseña provisional debe tener al menos 6 caracteres.' });
-  }
-
-  // 4. Inicialización segura de Firebase Admin SDK
-  let adminApp: admin.app.App;
-  try {
-    adminApp = initAdmin();
-  } catch (initErr) {
-    console.error('Error al inicializar Firebase Admin:', initErr);
-    return res.status(500).json({
-      error: 'Credenciales de servicio administrativo de Firebase no configuradas en el servidor.',
-    });
-  }
-
-  const auth = adminApp.auth();
-  const firestore = adminApp.firestore();
-
-  // 5. Verificación criptográfica del ID Token
-  let decodedToken: admin.auth.DecodedIdToken;
-  try {
-    decodedToken = await auth.verifyIdToken(idToken);
-  } catch {
-    return res.status(401).json({ error: 'Token de sesión expirado o inválido.' });
-  }
-
-  // 6. Verificación de permisos de Administrador en Firestore (Server-side)
-  const callerUid = decodedToken.uid;
-
-  try {
-    const callerDoc = await firestore.collection('users').doc(callerUid).get();
-    if (!callerDoc.exists || callerDoc.data()?.role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado: solo los administradores pueden emitir cuentas de cortesía.' });
-    }
-  } catch (fsErr) {
-    console.error('Error al consultar permisos de administrador en Firestore:', fsErr);
-    return res.status(500).json({ error: 'Error al verificar privilegios administrativos.' });
   }
 
   // 7. Creación de cuenta Trial con rollback garantizado
