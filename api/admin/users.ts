@@ -1,101 +1,140 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
-// Inicialización segura de Firebase Admin SDK (Singleton)
-if (!admin.apps.length) {
-  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_ADMIN_PROJECT_ID || 'abogadospro-fa495';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function initAdmin(): admin.app.App {
+  if (admin.apps.length > 0) {
+    return admin.app();
+  }
+
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'abogadospro-fa495';
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY)?.replace(/\\n/g, '\n');
+  const rawKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY;
+  const privateKey = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined;
 
   if (clientEmail && privateKey) {
-    admin.initializeApp({
+    return admin.initializeApp({
       credential: admin.credential.cert({
         projectId,
         clientEmail,
         privateKey,
       }),
     });
-  } else {
-    // Inicialización por defecto para entornos con credenciales de aplicación
-    admin.initializeApp({
-      projectId,
-    });
   }
+
+  // Inicialización alternativa para entornos con Application Default Credentials
+  return admin.initializeApp({
+    projectId,
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Solo permitir solicitudes POST
+  // 1. Método HTTP
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido. Use POST.' });
   }
 
+  // 2. Encabezado de Autorización (Token Bearer)
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Encabezado de autorización ausente o no válido.' });
+  }
+
+  const idToken = authHeader.split('Bearer ')[1].trim();
+  if (!idToken) {
+    return res.status(401).json({ error: 'Token de sesión vacío.' });
+  }
+
+  // 3. Validación de Payload antes de invocar operaciones de base de datos
+  const { email, password, displayName, studioName } = req.body || {};
+
+  if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
+    return res.status(400).json({ error: 'El correo electrónico proporcionado no tiene un formato válido.' });
+  }
+
+  if (!displayName || typeof displayName !== 'string' || displayName.trim().length < 2) {
+    return res.status(400).json({ error: 'El nombre del titular es obligatorio y debe tener al menos 2 caracteres.' });
+  }
+
+  if (!password || typeof password !== 'string' || password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña provisional debe tener al menos 6 caracteres.' });
+  }
+
+  // 4. Inicialización segura de Firebase Admin SDK
+  let adminApp: admin.app.App;
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Encabezado de autorización ausente o no válido.' });
-    }
+    adminApp = initAdmin();
+  } catch (initErr) {
+    console.error('Error al inicializar Firebase Admin:', initErr);
+    return res.status(500).json({
+      error: 'Credenciales de servicio administrativo de Firebase no configuradas en el servidor.',
+    });
+  }
 
-    const idToken = authHeader.split('Bearer ')[1];
-    let decodedToken;
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch {
-      return res.status(401).json({ error: 'Token de sesión expirado o inválido.' });
-    }
+  // 5. Verificación criptográfica del ID Token
+  let decodedToken: admin.auth.DecodedIdToken;
+  try {
+    decodedToken = await adminApp.auth().verifyIdToken(idToken);
+  } catch {
+    return res.status(401).json({ error: 'Token de sesión expirado o inválido.' });
+  }
 
-    const callerUid = decodedToken.uid;
+  // 6. Verificación de permisos de Administrador en Firestore (Server-side)
+  const callerUid = decodedToken.uid;
+  const firestore = adminApp.firestore();
 
-    // Verificar en Firestore que el solicitante tenga rol de 'admin'
-    const firestore = admin.firestore();
+  try {
     const callerDoc = await firestore.collection('users').doc(callerUid).get();
-    
     if (!callerDoc.exists || callerDoc.data()?.role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado: solo los administradores pueden crear cuentas de cortesía.' });
+      return res.status(403).json({ error: 'Acceso denegado: solo los administradores pueden emitir cuentas de cortesía.' });
     }
+  } catch (fsErr) {
+    console.error('Error al consultar permisos de administrador en Firestore:', fsErr);
+    return res.status(500).json({ error: 'Error al verificar privilegios administrativos.' });
+  }
 
-    const { email, password, displayName, studioName } = req.body || {};
+  // 7. Creación de cuenta Trial con rollback garantizado
+  const normalizedEmail = email.trim().toLowerCase();
+  const cleanDisplayName = displayName.trim();
+  const cleanStudioName = typeof studioName === 'string' ? studioName.trim() : '';
 
-    if (!email || !password || !displayName) {
-      return res.status(400).json({ error: 'Faltan campos requeridos: email, password, displayName.' });
-    }
+  let createdAuthUid: string | null = null;
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'La contraseña provisional debe tener al menos 6 caracteres.' });
-    }
-
-    // 1. Crear el usuario en Firebase Authentication sin alterar la sesión del Admin
-    const userRecord = await admin.auth().createUser({
-      email: email.trim(),
+  try {
+    // 7.1 Crear usuario en Firebase Auth sin afectar la sesión del admin
+    const userRecord = await adminApp.auth().createUser({
+      email: normalizedEmail,
       password,
-      displayName: displayName.trim(),
+      displayName: cleanDisplayName,
     });
 
-    const newUid = userRecord.uid;
+    createdAuthUid = userRecord.uid;
     const nowIso = new Date().toISOString();
 
-    // 2. Crear el documento del usuario en Firestore (Trial, Cortesía, cambio de contraseña obligatorio)
+    // 7.2 Crear perfil en Firestore
     const userProfile = {
-      uid: newUid,
-      email: email.trim(),
-      displayName: displayName.trim(),
-      studioName: studioName?.trim() || '',
+      uid: createdAuthUid,
+      email: normalizedEmail,
+      displayName: cleanDisplayName,
+      studioName: cleanStudioName,
       role: 'user',
       accountType: 'trial',
       plan: 'trial',
       billingExempt: true,
       subscriptionStatus: 'trialing',
-      workspaceId: newUid,
+      workspaceId: createdAuthUid,
       mustChangePassword: true,
       createdAt: nowIso,
     };
 
-    await firestore.collection('users').doc(newUid).set(userProfile);
+    await firestore.collection('users').doc(createdAuthUid).set(userProfile);
 
-    // 3. Crear el workspace aislado para el nuevo abogado
-    await firestore.collection('workspaces').doc(newUid).set({
-      id: newUid,
-      name: studioName?.trim() || displayName.trim(),
-      ownerUid: newUid,
+    // 7.3 Crear workspace aislado para el nuevo abogado
+    await firestore.collection('workspaces').doc(createdAuthUid).set({
+      id: createdAuthUid,
+      name: cleanStudioName || cleanDisplayName,
+      ownerUid: createdAuthUid,
       plan: 'trial',
       createdAt: nowIso,
     });
@@ -104,15 +143,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       message: 'Cuenta de cortesía creada exitosamente.',
       user: {
-        uid: newUid,
-        email: email.trim(),
-        displayName: displayName.trim(),
+        uid: createdAuthUid,
+        email: normalizedEmail,
+        displayName: cleanDisplayName,
         accountType: 'trial',
       },
     });
-  } catch (error: unknown) {
-    console.error('Error en API /api/admin/users:', error);
-    const errMessage = error instanceof Error ? error.message : 'Error interno al crear usuario.';
-    return res.status(500).json({ error: errMessage });
+  } catch (creationError: unknown) {
+    // Rollback: Si se creó el Auth User pero falló Firestore, eliminar Auth User
+    if (createdAuthUid) {
+      try {
+        await adminApp.auth().deleteUser(createdAuthUid);
+        console.warn(`Rollback completado: usuario ${createdAuthUid} eliminado de Auth tras fallo en Firestore.`);
+      } catch (rollbackError) {
+        console.error(`Error crítico en rollback de usuario ${createdAuthUid}:`, rollbackError);
+      }
+    }
+
+    const errCode = (creationError as { code?: string })?.code;
+    if (errCode === 'auth/email-already-exists') {
+      return res.status(409).json({ error: 'Ya existe una cuenta registrada con este correo electrónico.' });
+    }
+
+    console.error('Error durante la creación de cuenta de cortesía:', creationError);
+    return res.status(500).json({ error: 'Ocurrió un error al procesar la creación de la cuenta.' });
   }
 }

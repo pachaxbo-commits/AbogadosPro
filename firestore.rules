@@ -19,7 +19,7 @@ service cloud.firestore {
       return isAuthenticated() && (
         request.auth.token.role == 'admin' ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         getUserDoc().role == 'admin')
+         getUserDoc().get('role', 'user') == 'admin')
       );
     }
 
@@ -27,7 +27,7 @@ service cloud.firestore {
       return isAuthenticated() && (
         isAdmin() ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         getUserDoc().workspaceId == workspaceId)
+         getUserDoc().get('workspaceId', '') == workspaceId)
       );
     }
 
@@ -38,23 +38,23 @@ service cloud.firestore {
       // Lectura permitida si el usuario es el dueño o es un administrador
       allow read: if isOwner(userId) || isAdmin();
 
-      // Creación permitida al auto-registrarse (rol obligatorio: user, tipo: free, billingExempt: false) o por admin
+      // Creación: permitida al auto-registrarse (rol: user, tipo: free, billingExempt: false) o por admin
       allow create: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.role == 'user' &&
-        request.resource.data.accountType == 'free' &&
-        request.resource.data.billingExempt == false &&
-        request.resource.data.workspaceId == userId
+        request.resource.data.get('role', 'user') == 'user' &&
+        request.resource.data.get('accountType', 'free') == 'free' &&
+        request.resource.data.get('billingExempt', false) == false &&
+        request.resource.data.get('workspaceId', userId) == userId
       );
 
-      // Modificación permitida: un usuario no puede auto-ascender a admin ni cambiar su plan/billingExempt
+      // Modificación: un usuario NO puede auto-ascender a admin ni cambiar su plan/billingExempt/workspaceId
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.role == resource.data.role &&
-        request.resource.data.accountType == resource.data.accountType &&
-        request.resource.data.plan == resource.data.plan &&
-        request.resource.data.billingExempt == resource.data.billingExempt &&
-        request.resource.data.workspaceId == resource.data.workspaceId
+        request.resource.data.get('role', 'user') == resource.data.get('role', 'user') &&
+        request.resource.data.get('accountType', 'free') == resource.data.get('accountType', 'free') &&
+        request.resource.data.get('plan', 'free') == resource.data.get('plan', 'free') &&
+        request.resource.data.get('billingExempt', false) == resource.data.get('billingExempt', false) &&
+        request.resource.data.get('workspaceId', userId) == resource.data.get('workspaceId', userId)
       );
 
       // Eliminación reservada exclusivamente para administradores
@@ -70,13 +70,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == workspaceId);
       allow update, delete: if isAdmin() || isInWorkspace(workspaceId);
 
-      // Subcolecciones aisladas de causas jurídicas
-      match /{subcollection}/{docId} {
+      // Subcolecciones aisladas de causas jurídicas (clientes, casos, eventos, pagos, etc.)
+      match /{document=**} {
         allow read, write: if isInWorkspace(workspaceId);
       }
     }
 
-    // Por defecto, denegar cualquier acceso no especificado explícitamente
+    // Denegar cualquier otra colección no definida explícitamente
     match /{document=**} {
       allow read, write: if false;
     }
