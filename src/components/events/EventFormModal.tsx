@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
+import { Calendar } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
 import { Evento, TipoEvento } from '../../types';
+import { calendarToday, eventReminders, googleCalendarUrl, openCalendarWindow } from '../../services/calendarService';
 
 interface EventFormModalProps {
   isOpen: boolean;
@@ -20,13 +22,17 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   evento,
   onSuccess,
 }) => {
-  const { cases, addEvent, updateEvent } = useLegalData();
+  const formId = useId();
+  const [recordatorios, setRecordatorios] = useState(() => eventReminders(evento));
+  const { cases, clients, addEvent, updateEvent } = useLegalData();
+  const submitting = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const availableCases = preselectedClientId ? cases.filter((c) => c.clienteId === preselectedClientId) : cases;
 
   const [casoId, setCasoId] = useState(evento?.casoId || preselectedCasoId || (availableCases[0]?.id || ''));
   const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo || 'Audiencia');
   const [titulo, setTitulo] = useState(evento?.titulo || '');
-  const [fecha, setFecha] = useState(evento?.fecha || new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState(evento?.fecha || calendarToday());
   const [hora, setHora] = useState(evento ? evento.hora || '' : '10:00');
   const [descripcion, setDescripcion] = useState(evento?.descripcion || '');
   const [juzgado, setJuzgado] = useState(evento?.juzgado || '');
@@ -35,9 +41,25 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   const [error, setError] = useState('');
 
   const currentCasoId = preselectedCasoId || casoId || (availableCases[0]?.id || '');
+  const closeForm = () => {
+    if (submitting.current) return;
+    if (!evento) {
+      setCasoId(preselectedCasoId || availableCases[0]?.id || '');
+      setTipo('Audiencia');
+      setTitulo('');
+      setFecha(calendarToday());
+      setHora('10:00');
+      setDescripcion('');
+      setJuzgado('');
+      setRecordatorios(eventReminders());
+    }
+    setError('');
+    onClose();
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent, withCalendar = false) => {
     e.preventDefault();
+    if (submitting.current) return;
     if (!titulo.trim()) {
       setError('El título del evento es obligatorio');
       return;
@@ -52,6 +74,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
     }
 
     try {
+      submitting.current = true;
       setIsSubmitting(true);
       setError('');
       const data = {
@@ -63,7 +86,13 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         descripcion: descripcion.trim() || undefined,
         juzgado: juzgado.trim() || undefined,
         realizado: evento?.realizado,
+        recordatorios: { ...recordatorios, unaHoraAntes: Boolean(hora.trim()) && recordatorios.unaHoraAntes },
       };
+      if (withCalendar) {
+        const caso = cases.find((item) => item.id === currentCasoId);
+        openCalendarWindow(googleCalendarUrl({ ...data, id: evento?.id || '' }, caso, clients.find((item) => item.id === caso?.clienteId)));
+        return;
+      }
       if (evento) await updateEvent(evento.id, data);
       else await addEvent(data);
 
@@ -72,14 +101,16 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         setTitulo('');
         setDescripcion('');
         setJuzgado('');
+        setRecordatorios(eventReminders());
       }
 
       onClose();
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error(err);
-      setError(evento ? 'Error al editar el evento' : 'Error al agendar el evento');
+      setError(err instanceof Error ? err.message : evento ? 'Error al editar el evento' : 'Error al agendar el evento');
     } finally {
+      submitting.current = false;
       setIsSubmitting(false);
     }
   };
@@ -87,12 +118,28 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={closeForm}
       title={evento ? 'Editar evento' : 'Agendar evento'}
       subtitle={evento ? 'Modificar los datos del evento' : 'Programar audiencia, vencimiento de plazo, actuado o reunión'}
       maxWidth="md"
+      footer={<div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={closeForm}
+            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit" form={formId}
+            disabled={isSubmitting || availableCases.length === 0}
+            className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
+          >
+            {isSubmitting ? 'Guardando...' : evento ? 'Guardar cambios' : 'Agendar Evento'}
+          </button>
+        </div>}
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} id={formId} onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 text-xs bg-rose-50 text-rose-800 border border-rose-200 rounded-md">
             {error}
@@ -106,7 +153,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
           <select
             value={currentCasoId}
             onChange={(e) => setCasoId(e.target.value)}
-            disabled={Boolean(preselectedCasoId)}
+            disabled={Boolean(preselectedCasoId || evento?.resultado || evento?.eventoOrigenId)}
             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900 bg-white disabled:bg-slate-100"
           >
             {availableCases.map((c) => (
@@ -188,7 +235,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
             <input
               type="time"
               value={hora}
-              onChange={(e) => setHora(e.target.value)}
+              onChange={(e) => { setHora(e.target.value); if (!e.target.value) setRecordatorios((prev) => ({ ...prev, unaHoraAntes: false })); }}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
             />
           </div>
@@ -207,22 +254,16 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
           />
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting || availableCases.length === 0}
-            className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
-          >
-            {isSubmitting ? 'Guardando...' : evento ? 'Guardar cambios' : 'Agendar Evento'}
-          </button>
-        </div>
+        <fieldset className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-slate-700">Recordatorios</legend>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={recordatorios.unDiaAntes} onChange={(e) => setRecordatorios((prev) => ({ ...prev, unDiaAntes: e.target.checked }))} />1 día antes</label>
+            {hora && <label className="flex items-center gap-2"><input type="checkbox" checked={recordatorios.unaHoraAntes} onChange={(e) => setRecordatorios((prev) => ({ ...prev, unaHoraAntes: e.target.checked }))} />1 hora antes</label>}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">Configura estos avisos en Google Calendar antes de guardar.</p>
+        </fieldset>
+        <button type="button" onClick={(e) => { if (formRef.current?.reportValidity()) void handleSubmit(e, true); }} disabled={isSubmitting || availableCases.length === 0} className="inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-900 hover:bg-brand-50 disabled:opacity-50"><Calendar className="h-4 w-4" aria-hidden="true" />Agregar a Google Calendar</button>
+
       </form>
     </Modal>
   );

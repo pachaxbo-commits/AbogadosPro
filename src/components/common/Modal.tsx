@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -7,6 +8,7 @@ interface ModalProps {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
@@ -16,6 +18,7 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   subtitle,
   children,
+  footer,
   maxWidth = 'md',
 }) => {
   useEffect(() => {
@@ -42,7 +45,7 @@ export const Modal: React.FC<ModalProps> = ({
     '2xl': 'max-w-2xl',
   }[maxWidth];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
@@ -74,7 +77,9 @@ export const Modal: React.FC<ModalProps> = ({
         <div className="modal-body p-4 sm:p-6 overflow-y-auto min-h-0 overscroll-contain">
           {children}
         </div>
+        {footer && <div className="shrink-0 border-t border-slate-100 bg-white p-4 sm:px-6">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

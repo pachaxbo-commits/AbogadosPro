@@ -1,6 +1,12 @@
-import { Cliente, Caso, Actividad, Evento, Pago, Gasto, Reembolso } from '../types';
+import { Cliente, Caso, Actividad, Evento, Pago, Gasto, Reembolso, Tarea, DatosTarea, EstadoTarea } from '../types';
+import type { DatosResultadoEvento } from '../types';
 
 export interface ILegalRepository {
+  getTasks(casoId?: string): Promise<Tarea[]>;
+  addTask(data: DatosTarea): Promise<Tarea>;
+  updateTask(id: string, data: DatosTarea): Promise<Tarea>;
+  setTaskStatus(id: string, estado: EstadoTarea): Promise<Tarea>;
+  deleteTask(id: string): Promise<void>;
   // Clientes
   getClients(): Promise<Cliente[]>;
   getClientById(id: string): Promise<Cliente | null>;
@@ -22,6 +28,7 @@ export interface ILegalRepository {
   getEvents(casoId?: string): Promise<Evento[]>;
   addEvent(evento: Omit<Evento, 'id'>): Promise<Evento>;
   updateEvent(id: string, data: Omit<Evento, 'id'>): Promise<Evento>;
+  saveEventResult(casoId: string, id: string, data: DatosResultadoEvento): Promise<Evento[]>;
 
   // Finanzas: Pagos
   getPayments(casoId?: string): Promise<Pago[]>;

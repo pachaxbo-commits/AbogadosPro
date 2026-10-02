@@ -29,6 +29,40 @@ export type TipoEvento =
   | 'Recordatorio'
   | 'Otro';
 
+export type PrioridadTarea = 'Alta' | 'Media' | 'Normal';
+export type EstadoTarea = 'Pendiente' | 'Completada';
+
+export interface Tarea {
+  id: string;
+  casoId: string;
+  titulo: string;
+  descripcion?: string;
+  fechaLimite: string; // Fecha ingresada por el usuario, YYYY-MM-DD (Bolivia).
+  horaLimite?: string; // HH:mm; su ausencia no implica una hora determinada.
+  prioridad: PrioridadTarea;
+  estado: EstadoTarea;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+export type DatosTarea = Pick<Tarea, 'casoId' | 'titulo' | 'descripcion' | 'fechaLimite' | 'horaLimite' | 'prioridad'>;
+
+export interface DocumentoCaso {
+  id: string;
+  casoId: string;
+  nombre: string;
+  categoria: string;
+  descripcion?: string;
+  fechaDocumento?: string;
+  fechaCarga: string;
+  nombreArchivo: string;
+  mimeType: string;
+  tamano: number;
+  referenciaArchivo: string;
+}
+export type DatosDocumento = Pick<DocumentoCaso, 'nombre' | 'categoria' | 'descripcion' | 'fechaDocumento'>;
+
 export interface Cliente {
   id: string;
   tipoCliente?: 'Persona' | 'Empresa'; // Opcional para registros anteriores
@@ -66,6 +100,21 @@ export interface Actividad {
   hora?: string; // HH:mm
 }
 
+export type TipoResultadoEvento = 'Realizada' | 'Suspendida' | 'Reprogramada' | 'Cancelada' | 'Otro';
+export interface DatosResultadoEvento {
+  tipo: TipoResultadoEvento;
+  observaciones: string;
+  proximosPasos?: string;
+  fecha: string;
+  nuevaFecha?: string;
+  nuevaHora?: string;
+}
+export interface ResultadoEvento extends DatosResultadoEvento {
+  registradoEn: string;
+  actualizadoEn: string;
+  eventoReprogramadoId?: string;
+}
+
 export interface Evento {
   id: string;
   casoId: string;
@@ -76,6 +125,11 @@ export interface Evento {
   descripcion?: string;
   juzgado?: string;
   realizado?: boolean;
+  estado?: 'Próximo' | 'Realizado' | 'Cancelado';
+  resultado?: ResultadoEvento;
+  eventoOrigenId?: string;
+  // Preferencias locales para la futura capa de notificaciones; no programan avisos.
+  recordatorios?: { unDiaAntes: boolean; unaHoraAntes: boolean };
 }
 
 export interface Pago {

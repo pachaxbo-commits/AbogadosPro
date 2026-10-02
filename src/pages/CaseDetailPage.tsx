@@ -4,14 +4,20 @@ import { useLegalData } from '../context/LegalDataContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { ActivityTimeline } from '../components/activities/ActivityTimeline';
 import { ActivityFormModal } from '../components/activities/ActivityFormModal';
+import { EventMenu } from '../components/events/EventMenu';
+import { WhatsAppContact } from '../components/common/WhatsAppContact';
 import { EventFormModal } from '../components/events/EventFormModal';
 import { PaymentFormModal } from '../components/finances/PaymentFormModal';
 import { ExpenseFormModal } from '../components/finances/ExpenseFormModal';
 import { ReimbursementFormModal } from '../components/finances/ReimbursementFormModal';
 import { FinancialRowActions } from '../components/finances/FinancialRowActions';
 import { Modal } from '../components/common/Modal';
-import { Pago, Gasto, Reembolso } from '../types';
+import { Pago, Gasto, Reembolso, Evento } from '../types';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
+import { TaskFormModal } from '../components/tasks/TaskFormModal';
+import { TaskSummary } from '../components/tasks/TaskSummary';
+import { CaseDocuments } from '../components/documents/CaseDocuments';
+import { EventResultAction, EventResultStatus } from '../components/events/EventResultAction';
 import { formatBs, formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import { AlertBadge } from '../components/common/AlertBadge';
 import {
@@ -27,13 +33,14 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
-type TabType = 'resumen' | 'actividad' | 'agenda' | 'finanzas';
+type TabType = 'resumen' | 'actividad' | 'agenda' | 'documentos' | 'finanzas';
 
 export const CaseDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     getCaseWithDetails,
+    clients,
     activities,
     payments,
     expenses,
@@ -42,13 +49,16 @@ export const CaseDetailPage: React.FC = () => {
     deleteExpense,
     deleteReimbursement,
     eventsWithCase,
+    documents,
+    documentsError,
   } = useLegalData();
 
   const tabParam = searchParams.get('tab') as TabType;
-  const activeTab: TabType = ['resumen', 'actividad', 'agenda', 'finanzas'].includes(tabParam)
+  const activeTab: TabType = ['resumen', 'actividad', 'agenda', 'documentos', 'finanzas'].includes(tabParam)
     ? tabParam
     : 'resumen';
   const selectedEventId = searchParams.get('evento');
+  const [editingCalendarEvent, setEditingCalendarEvent] = useState<Evento | null>(null);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,6 +95,8 @@ export const CaseDetailPage: React.FC = () => {
   const [financeSuccess, setFinanceSuccess] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [taskSuccess, setTaskSuccess] = useState('');
 
   const caso = id ? getCaseWithDetails(id) : undefined;
 
@@ -106,6 +118,7 @@ export const CaseDetailPage: React.FC = () => {
 
   // Actividades del caso
   const caseActivities = activities.filter((a) => a.casoId === caso.id);
+  const documentCount = documents.filter((doc) => doc.casoId === caso.id).length;
 
   // Eventos del caso (ordenados cronológicamente más próximos primero)
   const caseEvents = eventsWithCase.filter((e) => e.casoId === caso.id);
@@ -200,6 +213,7 @@ export const CaseDetailPage: React.FC = () => {
                 >
                   {caso.clienteNombre}
                 </Link>
+                <WhatsAppContact phone={clients.find(client => client.id === caso.clienteId)?.telefono} message={`Buen día, ${caso.clienteNombre}. Me comunico respecto al caso ${caso.nombre}.`} />
               </div>
 
               {caso.juzgadoTribunal && (
@@ -237,6 +251,7 @@ export const CaseDetailPage: React.FC = () => {
                 {isActionsOpen && (
                   <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-sm">
                     {([
+                      ['Nueva tarea', () => { setTaskSuccess(''); setIsTaskModalOpen(true); }],
                       ['Registrar actividad', () => setIsActivityModalOpen(true)],
                       ['Agendar evento', () => setIsEventModalOpen(true)],
                       ['Registrar pago', () => { setFinanceSuccess(''); setSelectedPayment(undefined); setIsPaymentModalOpen(true); }],
@@ -320,6 +335,14 @@ export const CaseDetailPage: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => handleTabChange('documentos')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'documentos' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          >
+            <FileText className="w-4 h-4" /><span>DOCUMENTOS ({documentsError ? '—' : documentCount})</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleTabChange('finanzas')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'finanzas'
@@ -334,12 +357,19 @@ export const CaseDetailPage: React.FC = () => {
       </div>
 
       {/* CONTENIDO DE PESTAÑAS */}
+      {activeTab === 'documentos' && <CaseDocuments key={caso.id} casoId={caso.id} />}
 
       {/* PESTAÑA 1: RESUMEN DEL CASO */}
       {activeTab === 'resumen' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Ficha principal del expediente */}
           <div className="lg:col-span-2 space-y-6">
+            {taskSuccess && <p role="status" className="text-sm text-brand-900">{taskSuccess}</p>}
+            <TaskSummary casoId={caso.id} onNewTask={() => { setTaskSuccess(''); setIsTaskModalOpen(true); }} />
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
+              <div><h2 className="text-sm font-semibold text-slate-900">Documentos</h2><p className="mt-1 text-xs text-slate-500">{documentsError ? 'No se pudo cargar el recuento' : `${documentCount} ${documentCount === 1 ? 'archivo' : 'archivos'}`}</p></div>
+              <button type="button" onClick={() => handleTabChange('documentos')} className="min-h-11 rounded-md px-2 text-sm font-semibold text-brand-900 hover:bg-brand-50">{documentCount ? 'Ver documentos →' : 'Agregar documento →'}</button>
+            </div>
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
               <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-brand-900" />
@@ -595,16 +625,21 @@ export const CaseDetailPage: React.FC = () => {
                         {ev.tipo}
                       </span>
                       {ev.alertaVisual && <AlertBadge alerta={ev.alertaVisual} />}
+                      <EventResultStatus event={ev} />
                     </div>
 
+                    <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5 text-xs font-mono text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       <span>{formatFecha(ev.fecha)}</span>
                       {ev.hora && <span>· {formatHora(ev.hora)}</span>}
                     </div>
+                      <EventMenu evento={ev} onEdit={() => setEditingCalendarEvent(ev)} />
+                    </div>
                   </div>
 
                   <h3 className="text-sm font-semibold text-slate-900">{ev.titulo}</h3>
+                  <EventResultAction event={ev} />
 
                   {ev.juzgado && (
                     <p className="text-xs text-slate-600 mt-1">
@@ -849,6 +884,7 @@ export const CaseDetailPage: React.FC = () => {
       )}
 
       {/* Modales de Gestión de este caso */}
+      {isTaskModalOpen && <TaskFormModal casoId={caso.id} onClose={() => setIsTaskModalOpen(false)} onSuccess={() => setTaskSuccess('Tarea creada correctamente.')} />}
       {isEditModalOpen && (
         <CaseFormModal
           isOpen={isEditModalOpen}
@@ -866,6 +902,7 @@ export const CaseDetailPage: React.FC = () => {
         onClose={() => setIsEventModalOpen(false)}
         preselectedCasoId={caso.id}
       />
+      {editingCalendarEvent && <EventFormModal isOpen evento={editingCalendarEvent} preselectedCasoId={caso.id} onClose={() => setEditingCalendarEvent(null)} />}
       {isPaymentModalOpen && <PaymentFormModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}

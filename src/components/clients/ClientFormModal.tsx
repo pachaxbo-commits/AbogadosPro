@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
 import { Cliente } from '../../types';
+import { PhoneInput } from '../common/PhoneInput';
 
 interface ClientFormModalProps {
   isOpen: boolean;
@@ -121,16 +122,10 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+            <label htmlFor="client-phone" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Teléfono / Celular
             </label>
-            <input
-              type="text"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              placeholder="Ej: +591 70012345"
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
-            />
+            <PhoneInput id="client-phone" value={telefono} onChange={setTelefono} disabled={isSubmitting} />
           </div>
 
           <div>

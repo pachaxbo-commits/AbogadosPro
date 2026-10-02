@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { EventMenu } from './EventMenu';
 import { Link } from 'react-router-dom';
 import { EventoConCaso } from '../../types';
 import { formatFecha, formatHora } from '../../services/formatters';
 import { AlertBadge } from '../common/AlertBadge';
 import { AreaBadge } from '../common/StatusBadge';
+import { EventResultAction, EventResultStatus } from './EventResultAction';
 import {
   Calendar,
   Clock,
@@ -11,7 +13,6 @@ import {
   Briefcase,
   User,
   ArrowRight,
-  MoreHorizontal,
 } from 'lucide-react';
 
 interface EventCardProps {
@@ -19,7 +20,6 @@ interface EventCardProps {
   showCaseLink?: boolean;
   summary?: boolean;
   onEdit?: () => void;
-  onComplete?: () => void;
 }
 
 export const EventCard: React.FC<EventCardProps> = ({
@@ -27,9 +27,7 @@ export const EventCard: React.FC<EventCardProps> = ({
   showCaseLink = true,
   summary = false,
   onEdit,
-  onComplete,
 }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const interactive = Boolean(onEdit);
   const getTipoStyle = (tipo: string) => {
     switch (tipo) {
@@ -59,9 +57,8 @@ export const EventCard: React.FC<EventCardProps> = ({
             {evento.tipo}
           </span>
           {!summary && <AreaBadge area={evento.casoArea} />}
-          {interactive && evento.realizado ? (
-            <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Realizado</span>
-          ) : evento.alertaVisual && <AlertBadge alerta={evento.alertaVisual} />}
+          {interactive && <EventResultStatus event={evento} />}
+          {evento.alertaVisual && <AlertBadge alerta={evento.alertaVisual} />}
         </div>
 
         <div className="flex items-center gap-2">
@@ -76,34 +73,13 @@ export const EventCard: React.FC<EventCardProps> = ({
             )}
           </div>
           {interactive && (
-            <div className="relative z-20">
-              <button
-                type="button"
-                aria-label={`Acciones para ${evento.titulo}`}
-                aria-expanded={isMenuOpen}
-                onClick={() => setIsMenuOpen((open) => !open)}
-                className="p-1.5 rounded text-slate-500 hover:bg-slate-100 hover:text-brand-900"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-              {isMenuOpen && (
-                <div className="absolute right-0 z-30 mt-1 min-w-40 rounded-md border border-slate-200 bg-white py-1 shadow-sm">
-                  <button type="button" onClick={() => { setIsMenuOpen(false); onEdit?.(); }} className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-brand-50">
-                    Editar
-                  </button>
-                  {!evento.realizado && (
-                    <button type="button" onClick={() => { setIsMenuOpen(false); onComplete?.(); }} className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-brand-50">
-                      Marcar como realizado
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <EventMenu evento={evento} onEdit={onEdit} />
           )}
         </div>
       </div>
 
       <h3 className={`font-semibold text-slate-900 break-words ${summary ? 'text-base mb-4' : 'text-sm mb-1'}`}>{evento.titulo}</h3>
+      {interactive && <EventResultAction event={evento} />}
 
       {!summary && evento.juzgado && (
         <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2">

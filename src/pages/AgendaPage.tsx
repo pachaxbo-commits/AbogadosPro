@@ -3,9 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { EventCard } from '../components/events/EventCard';
 import { EventFormModal } from '../components/events/EventFormModal';
-import { ActivityFormModal } from '../components/activities/ActivityFormModal';
 import { Evento } from '../types';
-import { getTodayIsoString } from '../services/formatters';
+import { taskToday } from '../services/tasks';
+import { eventState, eventHasPassed, pendingEventResult } from '../services/eventResults';
+import { useTaskClock } from '../hooks/useTaskClock';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -15,11 +16,12 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-type FilterType = 'todos' | 'hoy' | 'proximos' | 'audiencias' | 'plazos' | 'reuniones';
+type FilterType = 'todos' | 'hoy' | 'proximos' | 'audiencias' | 'plazos' | 'reuniones' | 'resultados';
 type DateFilter = 'sin_filtro' | 'hoy' | 'semana' | 'mes' | 'rango';
 
 export const AgendaPage: React.FC = () => {
-  const { events, eventsWithCase, updateEvent } = useLegalData();
+  const { events, eventsWithCase } = useLegalData();
+  const now = useTaskClock();
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState<FilterType>(() => {
     const requestedFilter = searchParams.get('filtro');
@@ -27,13 +29,11 @@ export const AgendaPage: React.FC = () => {
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Evento | null>(null);
-  const [activityCasoId, setActivityCasoId] = useState<string | null>(null);
-  const [completedCasoId, setCompletedCasoId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('sin_filtro');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const hoyStr = getTodayIsoString();
+  const hoyStr = taskToday(now);
   const today = new Date(`${hoyStr}T00:00:00Z`);
   const monday = new Date(today);
   monday.setUTCDate(today.getUTCDate() - (today.getUTCDay() + 6) % 7);
@@ -41,14 +41,6 @@ export const AgendaPage: React.FC = () => {
   sunday.setUTCDate(monday.getUTCDate() + 6);
   const weekStart = monday.toISOString().split('T')[0];
   const weekEnd = sunday.toISOString().split('T')[0];
-
-  const handleComplete = async (id: string) => {
-    const existing = events.find((event) => event.id === id);
-    if (!existing) return;
-    const { id: _id, ...data } = existing;
-    await updateEvent(id, { ...data, realizado: true });
-    setCompletedCasoId(existing.casoId);
-  };
 
   const filteredEvents = useMemo(() => {
     return eventsWithCase.filter((ev) => {
@@ -62,7 +54,9 @@ export const AgendaPage: React.FC = () => {
         case 'hoy':
           return ev.fecha === hoyStr;
         case 'proximos':
-          return ev.fecha >= hoyStr && !ev.realizado;
+          return !eventHasPassed(ev, now) && eventState(ev) === 'Próximo';
+        case 'resultados':
+          return pendingEventResult(ev, now);
         case 'audiencias':
           return ev.tipo === 'Audiencia';
         case 'plazos':
@@ -74,11 +68,11 @@ export const AgendaPage: React.FC = () => {
           return true;
       }
     });
-  }, [eventsWithCase, filter, hoyStr, weekStart, weekEnd, dateFilter, dateFrom, dateTo]);
+  }, [eventsWithCase, filter, hoyStr, weekStart, weekEnd, dateFilter, dateFrom, dateTo, now]);
 
   const countHoy = eventsWithCase.filter((e) => e.fecha === hoyStr).length;
-  const countAudiencias = eventsWithCase.filter((e) => e.tipo === 'Audiencia' && e.fecha >= hoyStr).length;
-  const countPlazos = eventsWithCase.filter((e) => e.tipo === 'Plazo' && e.fecha >= hoyStr).length;
+  const countAudiencias = eventsWithCase.filter((e) => e.tipo === 'Audiencia' && e.fecha >= hoyStr && eventState(e) === 'Próximo').length;
+  const countPlazos = eventsWithCase.filter((e) => e.tipo === 'Plazo' && e.fecha >= hoyStr && eventState(e) === 'Próximo').length;
 
   return (
     <div className="space-y-6">
@@ -105,6 +99,7 @@ export const AgendaPage: React.FC = () => {
 
       {/* Pestañas de Filtro Rápido */}
       <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-xs">
+        <button type="button" onClick={() => setFilter('resultados')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${filter === 'resultados' ? 'bg-brand-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Pendientes de resultado</button>
         <button
           type="button"
           onClick={() => setFilter('proximos')}
@@ -207,16 +202,6 @@ export const AgendaPage: React.FC = () => {
         )}
       </div>
 
-      {completedCasoId && (
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg">
-          <span>Evento marcado como realizado.</span>
-          <button type="button" onClick={() => { setActivityCasoId(completedCasoId); setCompletedCasoId(null); }} className="font-semibold text-brand-900 hover:underline">
-            Registrar actividad del caso →
-          </button>
-          <button type="button" onClick={() => setCompletedCasoId(null)} className="ml-auto text-slate-500 hover:text-slate-700" aria-label="Cerrar aviso">×</button>
-        </div>
-      )}
-
       {/* Lista Cronológica de Eventos */}
       <div className="space-y-3">
         {filteredEvents.length === 0 ? (
@@ -244,7 +229,6 @@ export const AgendaPage: React.FC = () => {
               evento={ev}
               showCaseLink={true}
               onEdit={() => setEditingEvent(events.find((event) => event.id === ev.id) || null)}
-              onComplete={() => void handleComplete(ev.id)}
             />
           ))
         )}
@@ -260,13 +244,6 @@ export const AgendaPage: React.FC = () => {
           isOpen
           onClose={() => setEditingEvent(null)}
           evento={editingEvent}
-        />
-      )}
-      {activityCasoId && (
-        <ActivityFormModal
-          isOpen
-          onClose={() => setActivityCasoId(null)}
-          casoId={activityCasoId}
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import { useLegalData } from '../context/LegalDataContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
 import { ClientFormModal } from '../components/clients/ClientFormModal';
+import { WhatsAppContact } from '../components/common/WhatsAppContact';
 import { EventFormModal } from '../components/events/EventFormModal';
 import { formatBs, formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import {
@@ -106,6 +107,7 @@ export const ClientDetailPage: React.FC = () => {
                 <Phone className="w-4 h-4 text-slate-400 shrink-0" />
                 <span className="font-medium">{cliente.telefono}</span>
               </div>}
+              <WhatsAppContact phone={cliente.telefono} />
               {cliente.correo && <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-slate-400 shrink-0" />
                 <span>{cliente.correo}</span>

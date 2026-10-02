@@ -1,5 +1,9 @@
 import { ILegalRepository } from './types';
-import { Cliente, Caso, Actividad, Evento, Pago, Gasto, Reembolso } from '../types';
+import { Cliente, Caso, Actividad, Evento, Pago, Gasto, Reembolso, Tarea, DatosTarea, EstadoTarea } from '../types';
+import { getInitialTasks } from '../data/taskDemoData';
+import { readStoredTask, validateTask } from '../services/tasks';
+import { applyEventResult } from '../services/eventResults';
+import type { DatosResultadoEvento } from '../types';
 import {
   INITIAL_CLIENTS,
   INITIAL_CASES,
@@ -18,6 +22,7 @@ const STORAGE_KEYS = {
   PAYMENTS: 'abogadospro_payments_v1',
   EXPENSES: 'abogadospro_expenses_v1',
   REIMBURSEMENTS: 'abogadospro_reimbursements_v1',
+  TASKS: 'abogadospro_tasks_v1',
 };
 
 /**
@@ -61,6 +66,8 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   private payments: Pago[];
   private expenses: Gasto[];
   private reimbursements: Reembolso[];
+  private tasks: Tarea[] = [];
+  private tasksReadError: Error | null = null;
 
   constructor() {
     this.clients = getStorage<Cliente[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
@@ -70,6 +77,69 @@ export class LocalStorageLegalRepository implements ILegalRepository {
     this.payments = getStorage<Pago[]>(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS);
     this.expenses = getStorage<Gasto[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
     this.reimbursements = getStorage<Reembolso[]>(STORAGE_KEYS.REIMBURSEMENTS, []);
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.TASKS);
+      if (stored === null) this.saveTasks(getInitialTasks(this.cases.map((caso) => caso.id)));
+      else {
+        const parsed: unknown = JSON.parse(stored);
+        if (!Array.isArray(parsed)) throw new Error('Formato inválido');
+        this.tasks = parsed.map(readStoredTask);
+      }
+    } catch {
+      this.tasksReadError = new Error('No se pudieron cargar las tareas locales. Los datos guardados se conservaron.');
+    }
+  }
+
+  // El adaptador es el único responsable de la persistencia y las fechas de auditoría.
+  private saveTasks(tasks: Tarea[]): void {
+    try { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }
+    catch { throw new Error('No se pudo guardar la tarea. Revisa el espacio y los permisos del navegador.'); }
+    this.tasks = tasks;
+  }
+
+  private ensureTasksLoaded(): void {
+    if (this.tasksReadError) throw this.tasksReadError;
+  }
+
+  async getTasks(casoId?: string): Promise<Tarea[]> {
+    this.ensureTasksLoaded();
+    return this.tasks.filter((task) => !casoId || task.casoId === casoId).map((task) => ({ ...task }));
+  }
+
+  async addTask(data: DatosTarea): Promise<Tarea> {
+    this.ensureTasksLoaded();
+    const clean = validateTask(data, this.cases.map((caso) => caso.id));
+    const stamp = new Date().toISOString();
+    const task: Tarea = { ...clean, id: `task-${crypto.randomUUID()}`, estado: 'Pendiente', createdAt: stamp, updatedAt: stamp };
+    this.saveTasks([task, ...this.tasks]);
+    return { ...task };
+  }
+
+  async updateTask(id: string, data: DatosTarea): Promise<Tarea> {
+    this.ensureTasksLoaded();
+    const existing = this.tasks.find((task) => task.id === id);
+    if (!existing) throw new Error('La tarea ya no existe.');
+    const updated = { ...existing, ...validateTask(data, this.cases.map((caso) => caso.id)), updatedAt: new Date().toISOString() };
+    this.saveTasks(this.tasks.map((task) => task.id === id ? updated : task));
+    return { ...updated };
+  }
+
+  async setTaskStatus(id: string, estado: EstadoTarea): Promise<Tarea> {
+    this.ensureTasksLoaded();
+    const existing = this.tasks.find((task) => task.id === id);
+    if (!existing) throw new Error('La tarea ya no existe.');
+    if (!['Pendiente', 'Completada'].includes(estado)) throw new Error('Estado de tarea inválido.');
+    if (existing.estado === estado) return { ...existing };
+    const stamp = new Date().toISOString();
+    const updated = { ...existing, estado, updatedAt: stamp, completedAt: estado === 'Completada' ? stamp : undefined };
+    this.saveTasks(this.tasks.map((task) => task.id === id ? updated : task));
+    return { ...updated };
+  }
+
+  async deleteTask(id: string): Promise<void> {
+    this.ensureTasksLoaded();
+    if (!this.tasks.some((task) => task.id === id)) throw new Error('La tarea ya no existe.');
+    this.saveTasks(this.tasks.filter((task) => task.id !== id));
   }
 
   // Clientes
@@ -173,10 +243,19 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   async updateEvent(id: string, data: Omit<Evento, 'id'>): Promise<Evento> {
     const existing = this.events.find((evento) => evento.id === id);
     if (!existing) throw new Error('Evento no encontrado');
+    if ((existing.resultado || existing.eventoOrigenId) && existing.casoId !== data.casoId) throw new Error('Un evento con historial de resultado no puede cambiar de caso.');
     const updated = { ...existing, ...data };
     this.events = this.events.map((evento) => evento.id === id ? updated : evento);
     setStorage(STORAGE_KEYS.EVENTS, this.events);
     return updated;
+  }
+
+  async saveEventResult(casoId: string, id: string, data: DatosResultadoEvento): Promise<Evento[]> {
+    const next = applyEventResult(this.events, casoId, id, data, new Date());
+    try { localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(next)); }
+    catch { throw new Error('No se pudo guardar el resultado. Revisa el almacenamiento del navegador.'); }
+    this.events = next;
+    return next.map((event) => ({ ...event }));
   }
 
   // Finanzas: Pagos
@@ -318,6 +397,8 @@ export class LocalStorageLegalRepository implements ILegalRepository {
    */
   async resetToInitial(): Promise<void> {
     const fresh = getInitialMockData();
+    this.saveTasks(getInitialTasks(fresh.cases.map((caso) => caso.id)));
+    this.tasksReadError = null;
     this.clients = fresh.clients;
     this.cases = fresh.cases;
     this.activities = fresh.activities;

@@ -1,3 +1,5 @@
+import { useTaskClock } from '../hooks/useTaskClock';
+import { taskToday } from '../services/tasks';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Cliente,
@@ -10,11 +12,30 @@ import {
   CasoConDetalles,
   ClienteConResumen,
   EventoConCaso,
+  Tarea,
+  DatosTarea,
+  EstadoTarea,
+  DocumentoCaso,
+  DatosDocumento,
+  DatosResultadoEvento,
 } from '../types';
-import { legalRepository } from '../repositories';
+import { eventState, eventHasPassed } from '../services/eventResults';
+import { documentRepository, legalRepository } from '../repositories';
 import { calcularAlertaVisual } from '../services/formatters';
 
 interface LegalDataContextType {
+  documents: DocumentoCaso[];
+  documentsError: string;
+  addDocument: (casoId: string, data: DatosDocumento, file: File) => Promise<DocumentoCaso>;
+  updateDocument: (casoId: string, id: string, data: DatosDocumento) => Promise<DocumentoCaso>;
+  deleteDocument: (casoId: string, id: string) => Promise<void>;
+  getDocumentUrl: (casoId: string, id: string) => Promise<string | null>;
+  tasks: Tarea[];
+  tasksError: string;
+  addTask: (data: DatosTarea) => Promise<Tarea>;
+  updateTask: (id: string, data: DatosTarea) => Promise<Tarea>;
+  setTaskStatus: (id: string, estado: EstadoTarea) => Promise<Tarea>;
+  deleteTask: (id: string) => Promise<void>;
   clients: Cliente[];
   cases: Caso[];
   activities: Actividad[];
@@ -32,6 +53,7 @@ interface LegalDataContextType {
   addActivity: (data: Omit<Actividad, 'id'>) => Promise<Actividad>;
   addEvent: (data: Omit<Evento, 'id'>) => Promise<Evento>;
   updateEvent: (id: string, data: Omit<Evento, 'id'>) => Promise<Evento>;
+  saveEventResult: (casoId: string, id: string, data: DatosResultadoEvento) => Promise<void>;
   addPayment: (data: Omit<Pago, 'id'>) => Promise<Pago>;
   updatePayment: (id: string, data: Omit<Pago, 'id'>) => Promise<Pago>;
   deletePayment: (id: string) => Promise<void>;
@@ -63,6 +85,11 @@ interface LegalDataContextType {
 const LegalDataContext = createContext<LegalDataContextType | undefined>(undefined);
 
 export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const eventNow = useTaskClock();
+  const [documents, setDocuments] = useState<DocumentoCaso[]>([]);
+  const [documentsError, setDocumentsError] = useState('');
+  const [tasks, setTasks] = useState<Tarea[]>([]);
+  const [tasksError, setTasksError] = useState('');
   const [clients, setClients] = useState<Cliente[]>([]);
   const [cases, setCases] = useState<Caso[]>([]);
   const [activities, setActivities] = useState<Actividad[]>([]);
@@ -75,7 +102,7 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
-      const [c, cs, a, e, p, ex, re] = await Promise.all([
+      const [c, cs, a, e, p, ex, re, ts, docs] = await Promise.all([
         legalRepository.getClients(),
         legalRepository.getCases(),
         legalRepository.getActivities(),
@@ -83,6 +110,14 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         legalRepository.getPayments(),
         legalRepository.getExpenses(),
         legalRepository.getReimbursements(),
+        legalRepository.getTasks().then((items) => { setTasksError(''); return items; }).catch((err: unknown) => {
+          setTasksError(err instanceof Error ? err.message : 'No se pudieron cargar las tareas.');
+          return [];
+        }),
+        documentRepository.getDocuments().then((items) => { setDocumentsError(''); return items; }).catch((err: unknown) => {
+          setDocumentsError(err instanceof Error ? err.message : 'No se pudieron cargar los documentos.');
+          return [];
+        }),
       ]);
       setClients(c);
       setCases(cs);
@@ -91,6 +126,8 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setPayments(p);
       setExpenses(ex);
       setReimbursements(re);
+      setTasks(ts);
+      setDocuments(docs);
     } catch (err) {
       console.error('Error loading legal data:', err);
     } finally {
@@ -103,6 +140,43 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [loadAll]);
 
   // Acciones
+  const saveEventResult = async (casoId: string, id: string, data: DatosResultadoEvento) => {
+    setEvents(await legalRepository.saveEventResult(casoId, id, data));
+  };
+  const getDocumentUrl = useCallback((casoId: string, id: string) => documentRepository.getFileUrl(casoId, id), []);
+  const addDocument = async (casoId: string, data: DatosDocumento, file: File) => {
+    const created = await documentRepository.addDocument(casoId, data, file);
+    setDocuments((prev) => [created, ...prev]);
+    return created;
+  };
+  const updateDocument = async (casoId: string, id: string, data: DatosDocumento) => {
+    const updated = await documentRepository.updateDocument(casoId, id, data);
+    setDocuments((prev) => prev.map((doc) => doc.id === id && doc.casoId === casoId ? updated : doc));
+    return updated;
+  };
+  const deleteDocument = async (casoId: string, id: string) => {
+    await documentRepository.deleteDocument(casoId, id);
+    setDocuments((prev) => prev.filter((doc) => doc.id !== id || doc.casoId !== casoId));
+  };
+  const addTask = async (data: DatosTarea): Promise<Tarea> => {
+    const created = await legalRepository.addTask(data);
+    setTasks((prev) => [created, ...prev]);
+    return created;
+  };
+  const updateTask = async (id: string, data: DatosTarea): Promise<Tarea> => {
+    const updated = await legalRepository.updateTask(id, data);
+    setTasks((prev) => prev.map((task) => task.id === id ? updated : task));
+    return updated;
+  };
+  const setTaskStatus = async (id: string, estado: EstadoTarea): Promise<Tarea> => {
+    const updated = await legalRepository.setTaskStatus(id, estado);
+    setTasks((prev) => prev.map((task) => task.id === id ? updated : task));
+    return updated;
+  };
+  const deleteTask = async (id: string): Promise<void> => {
+    await legalRepository.deleteTask(id);
+    setTasks((prev) => prev.filter((task) => task.id !== id));
+  };
   const addClient = async (data: Omit<Cliente, 'id' | 'fechaRegistro'>): Promise<Cliente> => {
     const created = await legalRepository.addClient(data);
     setClients((prev) => [created, ...prev]);
@@ -197,6 +271,7 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const resetDemoData = async (): Promise<void> => {
+    await documentRepository.reset();
     await legalRepository.resetToInitial();
     await loadAll();
   };
@@ -228,8 +303,8 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           return dtA.localeCompare(dtB);
         });
 
-      const hoyStr = new Date().toISOString().split('T')[0];
-      const proximoEvento = caseEvents.find((e) => e.fecha >= hoyStr) || caseEvents[0];
+      const hoyStr = taskToday(eventNow);
+      const proximoEvento = caseEvents.find((e) => e.fecha >= hoyStr && !eventHasPassed(e, eventNow) && eventState(e) === 'Próximo');
 
       return {
         ...caso,
@@ -244,7 +319,7 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         proximoEvento,
       };
     });
-  }, [cases, clients, payments, expenses, reimbursements, events]);
+  }, [cases, clients, payments, expenses, reimbursements, events, eventNow]);
 
   const getCaseWithDetails = useCallback(
     (caseId: string): CasoConDetalles | undefined => {
@@ -285,7 +360,7 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const clienteNombre = caso ? clientMap.get(caso.clienteId) || 'Desconocido' : 'Desconocido';
         const casoNombre = caso ? caso.nombre : 'Caso no especificado';
         const casoArea = caso ? caso.area : 'Civil';
-        const alertaVisual = calcularAlertaVisual(ev.fecha, ev.hora, ev.tipo);
+        const alertaVisual = eventState(ev) === 'Próximo' && !eventHasPassed(ev, eventNow) ? calcularAlertaVisual(ev.fecha, ev.hora, ev.tipo) : undefined;
 
         return {
           ...ev,
@@ -300,7 +375,7 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const dtB = `${b.fecha}T${b.hora || '00:00'}`;
         return dtA.localeCompare(dtB);
       });
-  }, [events, cases, clients]);
+  }, [events, cases, clients, eventNow]);
 
   const financialTotals = useMemo(() => {
     const totalAcordado = cases.reduce((sum, c) => sum + c.honorariosAcordados, 0);
@@ -327,6 +402,15 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   return (
     <LegalDataContext.Provider
       value={{
+        documents, documentsError, addDocument, updateDocument, deleteDocument,
+        getDocumentUrl,
+        saveEventResult,
+        tasks,
+        tasksError,
+        addTask,
+        updateTask,
+        setTaskStatus,
+        deleteTask,
         clients,
         cases,
         activities,

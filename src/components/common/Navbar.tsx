@@ -10,8 +10,11 @@ import {
   Menu,
   X,
   RotateCcw,
+  ListTodo,
 } from 'lucide-react';
 import { useLegalData } from '../../context/LegalDataContext';
+import { TaskNotifications } from '../tasks/TaskNotifications';
+import { ProfileMenu } from '../profile/ProfileMenu';
 
 export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -21,8 +24,9 @@ export const Navbar: React.FC = () => {
   const handleReset = async () => {
     if (window.confirm('¿Deseas restablecer los datos del demo al estado original?')) {
       setResetting(true);
-      await resetDemoData();
-      setResetting(false);
+      try { await resetDemoData(); }
+      catch (err) { window.alert(err instanceof Error ? err.message : 'No se pudo reiniciar el demo.'); }
+      finally { setResetting(false); }
     }
   };
 
@@ -31,6 +35,7 @@ export const Navbar: React.FC = () => {
     { to: '/clientes', label: 'Clientes', icon: Users },
     { to: '/casos', label: 'Casos', icon: Briefcase },
     { to: '/agenda', label: 'Agenda', icon: Calendar },
+    { to: '/tareas', label: 'Tareas', icon: ListTodo },
     { to: '/finanzas', label: 'Finanzas', icon: Wallet },
   ];
 
@@ -60,7 +65,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1">
+          <nav className="hidden xl:flex items-center gap-1">
             {navLinks.map((item) => {
               const Icon = item.icon;
               return (
@@ -84,21 +89,21 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Action */}
-          <div className="hidden lg:flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <TaskNotifications />
+            <ProfileMenu />
             <button
               type="button"
               onClick={handleReset}
               disabled={resetting}
               title="Restablecer datos demo originales"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-brand-800/70 border border-brand-700/50 transition-colors"
+              className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-brand-800/70 border border-brand-700/50 transition-colors"
             >
               <RotateCcw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
               <span>{resetting ? 'Restableciendo...' : 'Reiniciar Demo'}</span>
             </button>
-          </div>
-
           {/* Mobile menu button */}
-          <div className="flex lg:hidden items-center gap-2">
+          <div className="flex xl:hidden items-center gap-2">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -110,12 +115,13 @@ export const Navbar: React.FC = () => {
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
+          </div>
         </div>
       </div>
 
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div id="mobile-navigation" className="lg:hidden border-t border-brand-800 bg-brand-900 px-4 pt-2 pb-4 space-y-1 max-h-[calc(100dvh-4rem)] overflow-y-auto">
+        <div id="mobile-navigation" className="xl:hidden border-t border-brand-800 bg-brand-900 px-4 pt-2 pb-4 space-y-1 max-h-[calc(100dvh-4rem)] overflow-y-auto">
           {navLinks.map((item) => {
             const Icon = item.icon;
             return (

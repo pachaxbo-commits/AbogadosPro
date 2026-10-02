@@ -1,25 +1,8 @@
-/**
- * AbogadosPro - Guía y configuración preparada para Backend en Firebase
- * 
- * NOTA DE ARQUITECTURA:
- * El proyecto está 100% desacoplado a través de `ILegalRepository`.
- * 
- * Para activar Firebase en el futuro:
- * 1. Instalar dependencias oficiales:
- *    npm install firebase
- * 
- * 2. Crear las variables en .env.local basándote en .env.example:
- *    VITE_FIREBASE_API_KEY=...
- *    VITE_FIREBASE_PROJECT_ID=...
- *    etc.
- * 
- * 3. Descomentar la inicialización a continuación e implementar
- *    `FirebaseLegalRepository` cumpliendo la interfaz `ILegalRepository`.
- * 
- * 4. Cambiar en `src/repositories/index.ts`:
- *    export const legalRepository: ILegalRepository = new FirebaseLegalRepository();
- */
+import { getApps, initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
+/** Configuración web pública. Nunca colocar credenciales Admin aquí. */
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
@@ -29,10 +12,19 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
 };
 
-export const isFirebaseConfigured = (): boolean => {
-  return Boolean(
-    firebaseConfig.apiKey &&
-    firebaseConfig.projectId &&
-    firebaseConfig.apiKey !== 'tu_api_key_aqui'
-  );
-};
+const requiredFields = ['apiKey', 'authDomain', 'projectId', 'appId'] as const;
+
+export const isFirebaseConfigured = (): boolean => requiredFields.every((field) => {
+  const value = firebaseConfig[field].trim();
+  return Boolean(value) && !value.startsWith('tu_');
+});
+
+/** Inicialización bajo demanda: el modo local no abre conexiones a Firebase. */
+export function getFirebaseServices() {
+  if (!isFirebaseConfigured()) {
+    throw new Error('Completa la configuración de Firebase en .env.local antes de conectar.');
+  }
+  const app = getApps().find((item) => item.name === 'abogadospro')
+    ?? initializeApp(firebaseConfig, 'abogadospro');
+  return { app, auth: getAuth(app), db: getFirestore(app) };
+}

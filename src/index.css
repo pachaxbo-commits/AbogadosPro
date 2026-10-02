@@ -1,3 +1,4 @@
+@import './theme.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -127,4 +128,13 @@ a:focus-visible,
     background: white;
     box-shadow: 0 -1px 3px rgb(15 23 42 / 0.08);
   }
+}
+
+@keyframes task-notice-pulse {
+  0%, 100% { box-shadow: 0 4px 6px -1px rgb(15 23 42 / 0.1); }
+  50% { box-shadow: 0 6px 16px -2px rgb(15 23 42 / 0.2); }
+}
+.task-notice { animation: task-notice-pulse 700ms ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  .task-notice { animation: none; }
 }

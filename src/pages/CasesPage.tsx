@@ -1,3 +1,4 @@
+import { eventState } from '../services/eventResults';
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
@@ -34,7 +35,7 @@ export const CasesPage: React.FC = () => {
   const upcomingByCase = useMemo(() => {
     const upcoming = new Map<string, (typeof eventsWithCase)[number]>();
     for (const event of eventsWithCase) {
-      if (event.fecha >= today && !upcoming.has(event.casoId)) upcoming.set(event.casoId, event);
+      if (event.fecha >= today && eventState(event) === 'Próximo' && !upcoming.has(event.casoId)) upcoming.set(event.casoId, event);
     }
     return upcoming;
   }, [eventsWithCase, today]);

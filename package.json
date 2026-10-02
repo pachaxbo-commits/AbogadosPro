@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "node tests/run-tasks-tests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "firebase": "^12.19.0",
     "lucide-react": "^1.49.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

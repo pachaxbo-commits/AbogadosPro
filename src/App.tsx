@@ -9,10 +9,14 @@ import { CasesPage } from './pages/CasesPage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { AgendaPage } from './pages/AgendaPage';
 import { FinancesPage } from './pages/FinancesPage';
+import { TasksPage } from './pages/TasksPage';
+import { ProfileProvider } from './context/ProfileContext';
+import { ProfilePage } from './pages/ProfilePage';
 
 export function App() {
   return (
     <LegalDataProvider>
+      <ProfileProvider>
       <BrowserRouter>
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-brand-100 selection:text-brand-900">
           <Navbar />
@@ -25,6 +29,8 @@ export function App() {
               <Route path="/casos" element={<CasesPage />} />
               <Route path="/casos/:id" element={<CaseDetailPage />} />
               <Route path="/agenda" element={<AgendaPage />} />
+              <Route path="/tareas" element={<TasksPage />} />
+              <Route path="/mi-perfil" element={<ProfilePage />} />
               <Route path="/finanzas" element={<FinancesPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
@@ -43,6 +49,7 @@ export function App() {
           </footer>
         </div>
       </BrowserRouter>
+      </ProfileProvider>
     </LegalDataProvider>
   );
 }

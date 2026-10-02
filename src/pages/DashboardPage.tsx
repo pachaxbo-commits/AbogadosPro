@@ -1,3 +1,4 @@
+import { eventState } from '../services/eventResults';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
@@ -7,6 +8,7 @@ import { formatBs, formatFecha } from '../services/formatters';
 import { ClientFormModal } from '../components/clients/ClientFormModal';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
 import { EventFormModal } from '../components/events/EventFormModal';
+import { TaskSummary } from '../components/tasks/TaskSummary';
 import {
   Briefcase,
   Scale,
@@ -42,16 +44,16 @@ export const DashboardPage: React.FC = () => {
   const hoyStr = new Date().toISOString().split('T')[0];
 
   const upcomingAudiencias = eventsWithCase.filter(
-    (e) => e.tipo === 'Audiencia' && e.fecha >= hoyStr
+    (e) => e.tipo === 'Audiencia' && e.fecha >= hoyStr && eventState(e) === 'Próximo'
   ).length;
 
   const upcomingPlazos = eventsWithCase.filter(
-    (e) => e.tipo === 'Plazo' && e.fecha >= hoyStr
+    (e) => e.tipo === 'Plazo' && e.fecha >= hoyStr && eventState(e) === 'Próximo'
   ).length;
 
   // Próximos eventos (ordenados, futuros o de hoy)
   const proximosEventos = eventsWithCase
-    .filter((e) => e.fecha >= hoyStr)
+    .filter((e) => e.fecha >= hoyStr && eventState(e) === 'Próximo')
     .slice(0, 4);
 
   // Movimientos recientes (combinar actividades y pagos ordenados por fecha)
@@ -194,6 +196,7 @@ export const DashboardPage: React.FC = () => {
 
         {/* Columna Derecha: Movimientos y Actividades Recientes (1 col) */}
         <div className="space-y-4">
+          <TaskSummary />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-brand-900" />
