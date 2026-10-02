@@ -5,6 +5,15 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function getCleanPrivateKey(rawKey?: string): string | undefined {
+  if (!rawKey) return undefined;
+  let key = rawKey.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  return key.replace(/\\n/g, '\n');
+}
+
 function initAdmin(): App {
   if (getApps().length > 0) {
     return getApp();
@@ -12,8 +21,7 @@ function initAdmin(): App {
 
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'abogadospro-fa495';
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
-  const rawKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY;
-  const privateKey = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined;
+  const privateKey = getCleanPrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY);
 
   if (clientEmail && privateKey) {
     return initializeApp({
@@ -49,7 +57,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 3. Validación de Payload antes de invocar operaciones
-  const { email, password, displayName, studioName } = req.body || {};
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      // Fallback
+    }
+  }
+  const { email, password, displayName, studioName } = body || {};
 
   if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
     return res.status(400).json({ error: 'El correo electrónico proporcionado no tiene un formato válido.' });

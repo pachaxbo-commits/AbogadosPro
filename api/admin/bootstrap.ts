@@ -3,6 +3,15 @@ import { initializeApp, getApps, getApp, cert, type App } from 'firebase-admin/a
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
+function getCleanPrivateKey(rawKey?: string): string | undefined {
+  if (!rawKey) return undefined;
+  let key = rawKey.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  return key.replace(/\\n/g, '\n');
+}
+
 function initAdmin(): App {
   if (getApps().length > 0) {
     return getApp();
@@ -10,17 +19,21 @@ function initAdmin(): App {
 
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'abogadospro-fa495';
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
-  const rawKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY;
-  const privateKey = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined;
+  const privateKey = getCleanPrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY);
 
   if (clientEmail && privateKey) {
-    return initializeApp({
-      credential: cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-    });
+    try {
+      return initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
+      });
+    } catch (certErr) {
+      console.error('Error inicializando cert():', certErr);
+      throw new Error(`Fallo en cert(): ${certErr instanceof Error ? certErr.message : String(certErr)}`);
+    }
   }
 
   return initializeApp({
@@ -29,24 +42,51 @@ function initAdmin(): App {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Content-Type', 'application/json');
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido. Use POST.' });
   }
 
-  const { email } = req.body || {};
-  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-
-  if (!normalizedEmail || normalizedEmail !== 'admin@pachax.com') {
-    return res.status(403).json({ error: 'Acceso no autorizado para bootstrap.' });
-  }
-
   try {
-    const adminApp = initAdmin();
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // Fallback si no es JSON válido
+      }
+    }
+
+    const { email } = body || {};
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+    if (!normalizedEmail || normalizedEmail !== 'admin@pachax.com') {
+      return res.status(403).json({ error: 'Acceso no autorizado para bootstrap.' });
+    }
+
+    let adminApp: App;
+    try {
+      adminApp = initAdmin();
+    } catch (initErr) {
+      return res.status(500).json({
+        error: `Error al inicializar Firebase Admin: ${initErr instanceof Error ? initErr.message : String(initErr)}`,
+      });
+    }
+
     const auth = getAuth(adminApp);
     const firestore = getFirestore(adminApp);
 
     // Buscar usuario en Firebase Authentication
-    const userRecord = await auth.getUserByEmail(normalizedEmail);
+    let userRecord;
+    try {
+      userRecord = await auth.getUserByEmail(normalizedEmail);
+    } catch (userErr) {
+      return res.status(404).json({
+        error: `Usuario no encontrado en Firebase Auth: ${userErr instanceof Error ? userErr.message : String(userErr)}`,
+      });
+    }
+
     const uid = userRecord.uid;
     const nowIso = new Date().toISOString();
 
@@ -56,12 +96,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       admin: true,
     });
 
-    // 2. Establecer perfil oficial en Firestore (Fuente de verdad)
+    // 2. Establecer perfil oficial en Firestore
     const userRef = firestore.collection('users').doc(uid);
     const userDoc = await userRef.get();
     const currentData = userDoc.exists ? userDoc.data() : {};
 
-    const updatedProfile: Record<string, any> = {
+    const updatedProfile: Record<string, unknown> = {
       ...currentData,
       uid,
       email: normalizedEmail,
@@ -80,12 +120,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await userRef.set(updatedProfile, { merge: true });
 
-    // 3. Preservar y asegurar workspace sin borrar datos
-    const workspaceRef = firestore.collection('workspaces').doc(updatedProfile.workspaceId);
+    // 3. Preservar workspace sin borrar datos
+    const workspaceId = String(updatedProfile.workspaceId);
+    const workspaceRef = firestore.collection('workspaces').doc(workspaceId);
     const wsDoc = await workspaceRef.get();
     if (!wsDoc.exists) {
       await workspaceRef.set({
-        id: updatedProfile.workspaceId,
+        id: workspaceId,
         name: updatedProfile.displayName,
         ownerUid: uid,
         plan: 'admin',
@@ -113,9 +154,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
   } catch (err: unknown) {
-    console.error('Error en bootstrap admin:', err);
+    console.error('Error general en bootstrap:', err);
     return res.status(500).json({
-      error: err instanceof Error ? err.message : 'Error interno en bootstrap admin.',
+      error: err instanceof Error ? err.message : 'Error inesperado en servidor.',
     });
   }
 }
