@@ -86,9 +86,13 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
 
       onClose();
       if (onSuccess) onSuccess(guardado.id);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(caso ? 'Error al actualizar el caso' : 'Error al registrar el expediente');
+      setError(
+        err instanceof Error
+          ? err.message
+          : (caso ? 'Error al actualizar el caso' : 'Error al registrar el expediente')
+      );
     } finally {
       setIsSubmitting(false);
     }

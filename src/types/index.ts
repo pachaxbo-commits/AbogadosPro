@@ -188,3 +188,26 @@ export interface EventoConCaso extends Evento {
     tipo: 'hoy' | 'urgente' | 'proximo' | 'pasado';
   };
 }
+
+// Tipos de Autenticación, Roles y Planes
+export type Role = 'admin' | 'user';
+
+export type AccountType = 'free' | 'trial' | 'admin';
+
+export type PlanType = 'free' | 'trial' | 'pro' | 'estudio';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  studioName?: string;
+  role: Role;
+  accountType: AccountType;
+  plan: PlanType;
+  billingExempt: boolean;
+  subscriptionStatus?: 'active' | 'trialing' | 'inactive';
+  workspaceId: string;
+  mustChangePassword?: boolean;
+  createdAt: string;
+}
+

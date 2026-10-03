@@ -1,6 +1,6 @@
-import { getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 /** Configuración web pública. Nunca colocar credenciales Admin aquí. */
 export const firebaseConfig = {
@@ -12,19 +12,29 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
 };
 
-const requiredFields = ['apiKey', 'authDomain', 'projectId', 'appId'] as const;
+export const isFirebaseConfigured = (): boolean => {
+  return Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId &&
+    firebaseConfig.apiKey !== 'tu_api_key_aqui' &&
+    !firebaseConfig.apiKey.includes('tu_api_key')
+  );
+};
 
-export const isFirebaseConfigured = (): boolean => requiredFields.every((field) => {
-  const value = firebaseConfig[field].trim();
-  return Boolean(value) && !value.startsWith('tu_');
-});
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
 
-/** Inicialización bajo demanda: el modo local no abre conexiones a Firebase. */
-export function getFirebaseServices() {
-  if (!isFirebaseConfigured()) {
-    throw new Error('Completa la configuración de Firebase en .env.local antes de conectar.');
-  }
-  const app = getApps().find((item) => item.name === 'abogadospro')
-    ?? initializeApp(firebaseConfig, 'abogadospro');
-  return { app, auth: getAuth(app), db: getFirestore(app) };
+if (isFirebaseConfigured()) {
+  app = getApps().length > 0
+    ? getApp()
+    : initializeApp(firebaseConfig);
+
+  auth = getAuth(app);
+  db = getFirestore(app);
 }
+
+export { app, auth, db };
+export default app;
