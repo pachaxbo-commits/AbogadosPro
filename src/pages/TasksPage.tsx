@@ -5,6 +5,7 @@ import { useLegalData } from '../context/LegalDataContext';
 import { useProfile } from '../context/ProfileContext';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { TaskList } from '../components/tasks/TaskList';
+import { PageHeroHeader } from '../components/common/PageHeroHeader';
 import { useTaskClock } from '../hooks/useTaskClock';
 import { sortTasks, taskTiming, taskToday } from '../services/tasks';
 import type { PrioridadTarea } from '../types';
@@ -39,11 +40,12 @@ export function TasksPage() {
   };
   const visible = sortTasks(candidates.filter((task) => matches(task, filter)), now);
   return <div className="space-y-6">
-    <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
-      <div><div className="flex items-center gap-2"><h1 className="text-2xl font-bold text-slate-900">Tareas</h1><span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" aria-label="Tareas pendientes">{tasks.filter((task) => task.estado === 'Pendiente').length}</span></div>
-        <p className="mt-1 text-xs text-slate-500">Seguimiento de pendientes y vencimientos de todos los casos</p></div>
-      <button type="button" onClick={() => { setSuccess(''); setCreating(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800"><Plus className="h-4 w-4" />Nueva tarea</button>
-    </div>
+    <PageHeroHeader
+      title="Tareas"
+      subtitle="Seguimiento de pendientes y vencimientos de todos los casos"
+      titleAccessory={<span className="rounded-md border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold text-white" aria-label="Tareas pendientes">{tasks.filter((task) => task.estado === 'Pendiente').length}</span>}
+      actions={<button type="button" onClick={() => { setSuccess(''); setCreating(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-amber-400 bg-amber-400 px-4 py-2.5 text-sm font-bold text-brand-950 transition-colors hover:bg-amber-300"><Plus className="h-4 w-4" />Nueva tarea</button>}
+    />
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex flex-wrap gap-2" aria-label="Estado de las tareas">
         {filters.map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`min-h-11 rounded-md px-3 py-2 text-xs font-semibold transition-colors ${filter === value ? 'bg-brand-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{value} ({candidates.filter((task) => matches(task, value)).length})</button>)}

@@ -8,6 +8,7 @@ import { caseFollowUp } from '../services/caseFollowUp';
 import { formatFecha } from '../services/formatters';
 import { FollowUpRegistrationModal } from '../components/cases/CaseFollowUp';
 import { StatCard } from '../components/common/StatCard';
+import { PageHeroHeader } from '../components/common/PageHeroHeader';
 import { EventCard } from '../components/events/EventCard';
 import { financialDate } from '../services/finance';
 import { formatBs } from '../services/formatters';
@@ -111,18 +112,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-7">
       {/* Encabezado y Accesos Rápidos */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 rounded-2xl border border-brand-800 bg-brand-900 px-5 py-6 text-white shadow-sm sm:px-7">
-        <div>
-          <span className="mb-3 block h-0.5 w-9 bg-amber-400" aria-hidden="true" />
-          <h1 className="font-serif text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Panel de Control Jurídico
-          </h1>
-          <p className="mt-2 text-sm text-slate-200">
-            Tu agenda y la actividad reciente del despacho
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeroHeader title="Panel de Control Jurídico" subtitle="Tu agenda y la actividad reciente del despacho" actions={<>
           <button
             type="button"
             onClick={() => setIsClientModalOpen(true)}
@@ -147,8 +137,7 @@ export const DashboardPage: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Agendar evento</span>
           </button>
-        </div>
-      </div>
+      </>} />
 
       {/* Tarjetas Principales de Métricas */}
       <div>

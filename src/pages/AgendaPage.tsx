@@ -4,6 +4,7 @@ import { useLegalData } from '../context/LegalDataContext';
 import { useProfile } from '../context/ProfileContext';
 import { EventCard } from '../components/events/EventCard';
 import { EventFormModal } from '../components/events/EventFormModal';
+import { PageHeroHeader } from '../components/common/PageHeroHeader';
 import { Evento } from '../types';
 import { taskToday } from '../services/tasks';
 import { eventState, eventHasPassed, pendingEventResult } from '../services/eventResults';
@@ -81,25 +82,16 @@ export const AgendaPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Agenda
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Señalamientos, audiencias y plazos procesales consolidados de todos los casos
-          </p>
-        </div>
-
+      <PageHeroHeader title="Agenda" subtitle="Señalamientos, audiencias y plazos procesales consolidados de todos los casos" actions={
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors shadow-xs"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-amber-400 bg-amber-400 px-4 py-2.5 text-sm font-bold text-brand-950 transition-colors hover:bg-amber-300"
         >
           <Plus className="w-4 h-4" />
           <span>Agendar Evento</span>
         </button>
-      </div>
+      } />
 
       {/* Pestañas de Filtro Rápido */}
       <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-xs">

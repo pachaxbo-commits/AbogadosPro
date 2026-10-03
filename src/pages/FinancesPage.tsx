@@ -5,6 +5,7 @@ import { useLegalData } from '../context/LegalDataContext';
 import { useAuth } from '../context/AuthContext';
 import { StudioExpenses } from '../components/finances/StudioExpenses';
 import { StatCard } from '../components/common/StatCard';
+import { PageHeroHeader } from '../components/common/PageHeroHeader';
 import { financialDate, compareFinancialDate } from '../services/finance';
 import { formatBs } from '../services/formatters';
 import {
@@ -97,16 +98,7 @@ export const FinancesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Control Financiero General
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Resumen consolidado de honorarios pactados, cobranzas y gastos operativos
-          </p>
-        </div>
-      </div>
+      <PageHeroHeader title="Control Financiero General" subtitle="Resumen consolidado de honorarios pactados, cobranzas y gastos operativos" />
 
       <div role="tablist" aria-label="Secciones de Finanzas" className="flex gap-2 border-b border-slate-200">
         <button type="button" role="tab" aria-selected={section === 'cases'} onClick={() => setSection('cases')} className={`border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors ${section === 'cases' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-500 hover:text-brand-900'}`}>Clientes y casos</button>
