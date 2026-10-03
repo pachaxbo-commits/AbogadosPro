@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { currentFinanceTime, validFinanceTime } from '../../services/finance';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
 import { formatBs, getLocalTodayIsoString } from '../../services/formatters';
@@ -15,6 +16,7 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
   const { getCaseWithDetails, addReimbursement, updateReimbursement } = useLegalData();
   const [monto, setMonto] = useState(reembolso ? String(reembolso.monto) : '');
   const [fecha, setFecha] = useState(() => reembolso?.fecha ?? getLocalTodayIsoString());
+  const [hora, setHora] = useState(() => reembolso ? reembolso.hora || '' : currentFinanceTime());
   const [nota, setNota] = useState(reembolso?.nota ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -36,6 +38,7 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
       setError(`El monto no puede superar los gastos pendientes de ${formatBs(currentAvailable)}.`);
       return;
     }
+    if (!validFinanceTime(hora)) { setError('Ingresa una hora válida en HH:mm.'); return; }
     if (!fecha) {
       setError('Ingresa la fecha del reembolso.');
       return;
@@ -44,7 +47,7 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
     setSaving(true);
     setError('');
     try {
-      const data = { casoId, monto: amount, fecha, nota: nota.trim() || undefined };
+      const data = { casoId, monto: amount, fecha, hora: hora || undefined, nota: nota.trim() || undefined };
       if (reembolso) await updateReimbursement(reembolso.id, data);
       else await addReimbursement(data);
       onSuccess();
@@ -79,6 +82,9 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
           Fecha *
           <input type="date" value={fecha} onChange={(event) => setFecha(event.target.value)}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-900 focus:outline-none focus:ring-1 focus:ring-brand-900" />
+        </label>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Hora
+          <input aria-label="Hora" type="time" step="60" value={hora} onChange={e => setHora(e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
         </label>
         <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
           Concepto / Nota (opcional)

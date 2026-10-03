@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { currentFinanceTime, validFinanceTime } from '../../services/finance';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
 import { Gasto } from '../../types';
@@ -24,6 +25,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [concepto, setConcepto] = useState(gasto?.concepto ?? '');
   const [monto, setMonto] = useState<string>(gasto ? String(gasto.monto) : '');
   const [fecha, setFecha] = useState(() => gasto?.fecha ?? getLocalTodayIsoString());
+  const [hora, setHora] = useState(() => gasto ? gasto.hora || '' : currentFinanceTime());
   const [nota, setNota] = useState(gasto?.nota ?? '');
   const [reembolsable, setReembolsable] = useState(gasto?.reembolsable === true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,6 +46,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       setError('Ingresa un monto mayor a Bs 0.');
       return;
     }
+    if (!validFinanceTime(hora)) { setError('Ingresa una hora válida en HH:mm.'); return; }
     if (!fecha) {
       setError('Ingresa la fecha del gasto.');
       return;
@@ -65,6 +68,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         concepto: concepto.trim(),
         monto: parsedMonto,
         fecha,
+        hora: hora || undefined,
         nota: nota.trim() || undefined,
         reembolsable,
       };
@@ -168,6 +172,9 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           </div>
         </div>
 
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Hora
+          <input aria-label="Hora" type="time" step="60" value={hora} onChange={e => setHora(e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+        </label>
         <div>
           <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
             <input type="checkbox" checked={reembolsable} onChange={(e) => setReembolsable(e.target.checked)} className="accent-brand-900" />

@@ -13,11 +13,11 @@ export interface DocumentRepository {
 export const DOCUMENT_STORAGE_KEY = 'abogadospro_documents_v1';
 
 export class LocalDocumentRepository implements DocumentRepository {
-  constructor(private files: DocumentFileStore, private caseExists: (id: string) => Promise<boolean>) {}
+  constructor(private files: DocumentFileStore, private caseExists: (id: string) => Promise<boolean>, private storageKey = DOCUMENT_STORAGE_KEY) {}
 
   private read(): DocumentoCaso[] {
     try {
-      const raw: unknown = JSON.parse(localStorage.getItem(DOCUMENT_STORAGE_KEY) || '[]');
+      const raw: unknown = JSON.parse(localStorage.getItem(this.storageKey) || '[]');
       if (!Array.isArray(raw)) throw new Error();
       return raw.map((value: unknown) => {
         if (!value || typeof value !== 'object') throw new Error();
@@ -32,7 +32,7 @@ export class LocalDocumentRepository implements DocumentRepository {
     } catch { throw new Error('No se pudieron cargar los documentos. La información guardada se conservó.'); }
   }
   private write(items: DocumentoCaso[]): void {
-    try { localStorage.setItem(DOCUMENT_STORAGE_KEY, JSON.stringify(items)); }
+    try { localStorage.setItem(this.storageKey, JSON.stringify(items)); }
     catch { throw new Error('No se pudo guardar el documento. Revisa el espacio y los permisos del navegador.'); }
   }
   private find(casoId: string, id: string): DocumentoCaso {

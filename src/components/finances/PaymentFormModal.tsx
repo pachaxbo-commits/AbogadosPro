@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { currentFinanceTime, validFinanceTime } from '../../services/finance';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
 import { formatBs, getLocalTodayIsoString } from '../../services/formatters';
@@ -25,6 +26,7 @@ export const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
 
   const [monto, setMonto] = useState<string>(pago ? String(pago.monto) : '');
   const [fecha, setFecha] = useState(() => pago?.fecha ?? getLocalTodayIsoString());
+  const [hora, setHora] = useState(() => pago ? pago.hora || '' : currentFinanceTime());
   const [nota, setNota] = useState(pago?.nota ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +55,7 @@ export const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
         : `El monto no puede superar el saldo pendiente de ${formatBs(latestBalance)}.`);
       return;
     }
+    if (!validFinanceTime(hora)) { setError('Ingresa una hora válida en HH:mm.'); return; }
     if (!fecha) {
       setError('Ingresa la fecha del pago.');
       return;
@@ -66,6 +69,7 @@ export const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
         casoId,
         monto: parsedMonto,
         fecha,
+        hora: hora || undefined,
         nota: nota.trim() || undefined,
       };
       if (pago) await updatePayment(pago.id, data);
@@ -160,6 +164,9 @@ export const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
           />
         </div>
 
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Hora
+          <input aria-label="Hora" type="time" step="60" value={hora} onChange={e => setHora(e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+        </label>
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
             Concepto / Nota (Opcional)

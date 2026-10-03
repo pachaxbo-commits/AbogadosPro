@@ -4,7 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { StatCard } from '../components/common/StatCard';
 import { EventCard } from '../components/events/EventCard';
-import { formatBs, formatFecha } from '../services/formatters';
+import { financialDate } from '../services/finance';
+import { formatBs } from '../services/formatters';
 import { ClientFormModal } from '../components/clients/ClientFormModal';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
 import { EventFormModal } from '../components/events/EventFormModal';
@@ -77,7 +78,7 @@ export const DashboardPage: React.FC = () => {
       subtipo: 'Pago de honorarios',
       titulo: `Abono de ${formatBs(p.monto)}${p.nota ? ` - ${p.nota}` : ''}`,
       fecha: p.fecha,
-      hora: undefined,
+      hora: p.hora,
       casoId: p.casoId,
       casoNombre: caseMap.get(p.casoId)?.nombre || 'Caso',
       casoArea: caseMap.get(p.casoId)?.area || 'Civil',
@@ -210,7 +211,7 @@ export const DashboardPage: React.FC = () => {
                 <p className="text-sm font-semibold text-slate-800">{item.subtipo}</p>
                 <p className="mt-1 text-sm text-slate-600 break-words">{item.casoNombre}</p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-slate-500">{formatFecha(item.fecha)}</span>
+                  <span className="text-xs text-slate-500">{financialDate(item)}</span>
                   <Link
                     to={`/casos/${item.casoId}`}
                     className="min-h-11 inline-flex items-center gap-1 px-2 text-sm font-semibold text-brand-900 hover:text-brand-700 hover:underline"

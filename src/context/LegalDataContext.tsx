@@ -20,7 +20,8 @@ import {
   DatosResultadoEvento,
 } from '../types';
 import { eventState, eventHasPassed } from '../services/eventResults';
-import { documentRepository, legalRepository } from '../repositories';
+import { LocalDocumentRepository, DOCUMENT_STORAGE_KEY } from '../repositories/documentsRepository';
+import { TemporaryDocumentFiles } from '../services/documentFiles';
 import { ILegalRepository, demoLegalRepository, FirestoreLegalRepository } from '../repositories';
 import { calcularAlertaVisual } from '../services/formatters';
 import { useAuth } from './AuthContext';
@@ -88,6 +89,11 @@ interface LegalDataContextType {
 const LegalDataContext = createContext<LegalDataContextType | undefined>(undefined);
 
 export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser, userProfile, isDemo, loading } = useAuth();
+  if (loading) return <p className="p-6">Cargando…</p>;
+  return <LegalDataSession key={currentUser ? currentUser.uid + ':' + userProfile?.workspaceId : isDemo ? 'demo' : 'guest'}>{children}</LegalDataSession>;
+};
+const LegalDataSession: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const eventNow = useTaskClock();
   const [documents, setDocuments] = useState<DocumentoCaso[]>([]);
   const [documentsError, setDocumentsError] = useState('');
@@ -114,12 +120,19 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return demoLegalRepository;
   }, [currentUser, workspaceId]);
 
+  const documentRepository = useMemo(() => new LocalDocumentRepository(
+    new TemporaryDocumentFiles(), async (id) => Boolean(await activeRepository.getCaseById(id)),
+    currentUser ? DOCUMENT_STORAGE_KEY + ':' + encodeURIComponent(workspaceId || currentUser.uid) : DOCUMENT_STORAGE_KEY,
+  ), [activeRepository, currentUser, workspaceId]);
+
   const loadAll = useCallback(async () => {
     // Si aún está resolviendo auth, esperar
     if (authLoading) return;
 
     // Si no está autenticado ni en modo demo, no cargar datos demo
-    if (!currentUser && !isDemo) {
+    if ((!currentUser && !isDemo) || (currentUser && !workspaceId)) {
+      setTasks([]);
+      setDocuments([]);
       setClients([]);
       setCases([]);
       setActivities([]);
@@ -133,6 +146,8 @@ export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     try {
       setLoading(true);
+      setTasksError('');
+      setDocumentsError('');
       const [c, cs, a, e, p, ex, re, ts, docs] = await Promise.all([
         activeRepository.getClients(),
         activeRepository.getCases(),
@@ -164,7 +179,7 @@ documentRepository.getDocuments().catch((err) => {
     } finally {
       setLoading(false);
     }
-  }, [activeRepository, authLoading, currentUser, isDemo]);
+  }, [activeRepository, documentRepository, authLoading, currentUser, isDemo, workspaceId]);
 
   useEffect(() => {
     loadAll();
@@ -172,9 +187,9 @@ documentRepository.getDocuments().catch((err) => {
 
   // Acciones
   const saveEventResult = async (casoId: string, id: string, data: DatosResultadoEvento) => {
-    setEvents(await legalRepository.saveEventResult(casoId, id, data));
+    setEvents(await activeRepository.saveEventResult(casoId, id, data));
   };
-  const getDocumentUrl = useCallback((casoId: string, id: string) => documentRepository.getFileUrl(casoId, id), []);
+  const getDocumentUrl = useCallback((casoId: string, id: string) => documentRepository.getFileUrl(casoId, id), [documentRepository]);
   const addDocument = async (casoId: string, data: DatosDocumento, file: File) => {
     const created = await documentRepository.addDocument(casoId, data, file);
     setDocuments((prev) => [created, ...prev]);
@@ -190,22 +205,22 @@ documentRepository.getDocuments().catch((err) => {
     setDocuments((prev) => prev.filter((doc) => doc.id !== id || doc.casoId !== casoId));
   };
   const addTask = async (data: DatosTarea): Promise<Tarea> => {
-    const created = await legalRepository.addTask(data);
+    const created = await activeRepository.addTask(data);
     setTasks((prev) => [created, ...prev]);
     return created;
   };
   const updateTask = async (id: string, data: DatosTarea): Promise<Tarea> => {
-    const updated = await legalRepository.updateTask(id, data);
+    const updated = await activeRepository.updateTask(id, data);
     setTasks((prev) => prev.map((task) => task.id === id ? updated : task));
     return updated;
   };
   const setTaskStatus = async (id: string, estado: EstadoTarea): Promise<Tarea> => {
-    const updated = await legalRepository.setTaskStatus(id, estado);
+    const updated = await activeRepository.setTaskStatus(id, estado);
     setTasks((prev) => prev.map((task) => task.id === id ? updated : task));
     return updated;
   };
   const deleteTask = async (id: string): Promise<void> => {
-    await legalRepository.deleteTask(id);
+    await activeRepository.deleteTask(id);
     setTasks((prev) => prev.filter((task) => task.id !== id));
   };
   // Acciones de inserción y modificación con validación de límites de plan

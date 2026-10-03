@@ -115,6 +115,8 @@ export interface ResultadoEvento extends DatosResultadoEvento {
   eventoReprogramadoId?: string;
 }
 
+export interface RecordatorioEvento { cantidad: number; unidad: 'minutos' | 'horas' | 'días' | 'semanas' }
+
 export interface Evento {
   id: string;
   casoId: string;
@@ -129,14 +131,15 @@ export interface Evento {
   resultado?: ResultadoEvento;
   eventoOrigenId?: string;
   // Preferencias locales para la futura capa de notificaciones; no programan avisos.
-  recordatorios?: { unDiaAntes: boolean; unaHoraAntes: boolean };
+  recordatorios?: { unDiaAntes: boolean; unaHoraAntes: boolean; personalizados?: RecordatorioEvento[] };
 }
 
 export interface Pago {
   id: string;
   casoId: string;
   monto: number; // en Bs
-  fecha: string; // YYYY-MM-DD
+  fecha: string;
+  hora?: string; // HH:mm; opcional para movimientos anteriores. // YYYY-MM-DD
   nota?: string;
 }
 
@@ -145,7 +148,8 @@ export interface Gasto {
   casoId: string;
   concepto: string;
   monto: number; // en Bs
-  fecha: string; // YYYY-MM-DD
+  fecha: string;
+  hora?: string; // HH:mm; opcional para movimientos anteriores. // YYYY-MM-DD
   nota?: string;
   reembolsable?: boolean; // Registros anteriores sin este dato no generan deuda nueva.
 }
@@ -155,6 +159,7 @@ export interface Reembolso {
   casoId: string;
   monto: number;
   fecha: string;
+  hora?: string; // HH:mm; opcional para movimientos anteriores.
   nota?: string;
 }
 

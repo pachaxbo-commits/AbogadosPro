@@ -18,6 +18,7 @@ import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { TaskSummary } from '../components/tasks/TaskSummary';
 import { CaseDocuments } from '../components/documents/CaseDocuments';
 import { EventResultAction, EventResultStatus } from '../components/events/EventResultAction';
+import { financialDate, compareFinancialDate } from '../services/finance';
 import { formatBs, formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import { AlertBadge } from '../components/common/AlertBadge';
 import {
@@ -130,14 +131,14 @@ export const CaseDetailPage: React.FC = () => {
   // Pagos y Gastos
   const casePayments = payments
     .filter((p) => p.casoId === caso.id)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+    .sort((a, b) => compareFinancialDate(a, b));
 
   const caseExpenses = expenses
     .filter((g) => g.casoId === caso.id)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+    .sort((a, b) => compareFinancialDate(a, b));
   const caseReimbursements = reimbursements
     .filter((r) => r.casoId === caso.id)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+    .sort((a, b) => compareFinancialDate(a, b));
 
   const confirmDelete = async () => {
     if (!pendingDelete || deletingRef.current) return;
@@ -751,7 +752,7 @@ export const CaseDetailPage: React.FC = () => {
                       {casePayments.map((p) => (
                         <tr key={p.id} className="hover:bg-slate-50">
                           <td className="px-4 py-3 font-mono text-slate-700 whitespace-nowrap">
-                            {formatFecha(p.fecha)}
+                            {financialDate(p)}
                           </td>
                           <td data-label="Concepto" className="px-4 py-3 text-slate-800">
                             {p.nota || 'Pago a cuenta de honorarios'}
@@ -800,6 +801,13 @@ export const CaseDetailPage: React.FC = () => {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { label: 'Gastos registrados', value: caso.totalGastos, style: 'bg-slate-50 border-slate-200 text-slate-900' },
+                { label: 'Gastos reembolsados', value: caso.totalReembolsado, style: 'bg-emerald-50 border-emerald-200 text-emerald-900' },
+                { label: 'Pendiente de reembolso', value: caso.gastosPendientes, style: caso.gastosPendientes > 0 ? 'bg-amber-50 border-amber-200 text-amber-950' : 'bg-emerald-50 border-emerald-200 text-emerald-900' },
+              ].map(item => <div key={item.label} className={`p-4 rounded-lg border ${item.style}`}><span className="text-[11px] uppercase tracking-wider font-semibold block mb-1">{item.label}</span><span className="text-xl font-bold font-mono tabular-nums">{formatBs(item.value)}</span></div>)}
+            </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs">
               <span>Gastos registrados: <strong className="font-mono">{formatBs(caso.totalGastos)}</strong></span>
               <span>Reembolsables: <strong className="font-mono">{formatBs(caso.gastosReembolsables)}</strong></span>
@@ -813,6 +821,7 @@ export const CaseDetailPage: React.FC = () => {
                 className="rounded-md border border-brand-300 bg-white px-3 py-1.5 font-semibold text-brand-900 hover:bg-brand-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-900">
                 Registrar reembolso
               </button>}
+              <span className="ml-auto font-bold text-brand-900">Pendiente del cliente: {formatBs(caso.totalPendiente)}</span>
             </div>
 
             {caseExpenses.length === 0 ? (
@@ -835,7 +844,7 @@ export const CaseDetailPage: React.FC = () => {
                     {caseExpenses.map((g) => (
                       <tr key={g.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-mono text-slate-700 whitespace-nowrap">
-                          {formatFecha(g.fecha)}
+                          {financialDate(g)}
                         </td>
                         <td data-label="Concepto" className="px-4 py-3 font-semibold text-slate-900">
                           <div className="min-w-0">
@@ -869,7 +878,7 @@ export const CaseDetailPage: React.FC = () => {
                     <th className="px-4 py-2.5">Fecha</th><th className="px-4 py-2.5">Nota</th><th className="px-4 py-2.5 text-right">Monto</th><th className="px-2 py-2.5" aria-label="Acciones" />
                   </tr></thead>
                   <tbody className="divide-y divide-slate-100">{caseReimbursements.map((r) => <tr key={r.id}>
-                    <td className="px-4 py-3 whitespace-nowrap">{formatFecha(r.fecha)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{financialDate(r)}</td>
                     <td data-label="Nota" className="px-4 py-3">{r.nota || 'Reembolso de gastos'}</td>
                     <td data-label="Monto" className="px-4 py-3 text-right font-mono font-bold text-emerald-800">{formatBs(r.monto)}</td>
                     <td data-label="Acciones" className="px-2 py-2 text-right"><FinancialRowActions label={`reembolso de ${formatBs(r.monto)}`}

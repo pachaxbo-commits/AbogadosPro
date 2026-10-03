@@ -2,8 +2,9 @@ import React, { useId, useRef, useState } from 'react';
 import { Calendar } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
-import { Evento, TipoEvento } from '../../types';
-import { calendarToday, eventReminders, googleCalendarUrl, openCalendarWindow } from '../../services/calendarService';
+import { configuredReminders, validateReminders } from '../../services/reminders';
+import { Evento, TipoEvento, type RecordatorioEvento } from '../../types';
+import { calendarToday, googleCalendarUrl, openCalendarWindow } from '../../services/calendarService';
 
 interface EventFormModalProps {
   isOpen: boolean;
@@ -23,7 +24,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   onSuccess,
 }) => {
   const formId = useId();
-  const [recordatorios, setRecordatorios] = useState(() => eventReminders(evento));
+  const [recordatorios, setRecordatorios] = useState(() => configuredReminders(evento));
   const { cases, clients, addEvent, updateEvent } = useLegalData();
   const submitting = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -51,7 +52,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       setHora('10:00');
       setDescripcion('');
       setJuzgado('');
-      setRecordatorios(eventReminders());
+      setRecordatorios(configuredReminders());
     }
     setError('');
     onClose();
@@ -86,7 +87,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         descripcion: descripcion.trim() || undefined,
         juzgado: juzgado.trim() || undefined,
         realizado: evento?.realizado,
-        recordatorios: { ...recordatorios, unaHoraAntes: Boolean(hora.trim()) && recordatorios.unaHoraAntes },
+        recordatorios: { unDiaAntes: false, unaHoraAntes: false, personalizados: validateReminders(recordatorios) },
       };
       if (withCalendar) {
         const caso = cases.find((item) => item.id === currentCasoId);
@@ -101,7 +102,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         setTitulo('');
         setDescripcion('');
         setJuzgado('');
-        setRecordatorios(eventReminders());
+        setRecordatorios(configuredReminders());
       }
 
       onClose();
@@ -235,7 +236,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
             <input
               type="time"
               value={hora}
-              onChange={(e) => { setHora(e.target.value); if (!e.target.value) setRecordatorios((prev) => ({ ...prev, unaHoraAntes: false })); }}
+              onChange={(e) => setHora(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900"
             />
           </div>
@@ -256,11 +257,16 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
 
         <fieldset className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
           <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-slate-700">Recordatorios</legend>
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={recordatorios.unDiaAntes} onChange={(e) => setRecordatorios((prev) => ({ ...prev, unDiaAntes: e.target.checked }))} />1 día antes</label>
-            {hora && <label className="flex items-center gap-2"><input type="checkbox" checked={recordatorios.unaHoraAntes} onChange={(e) => setRecordatorios((prev) => ({ ...prev, unaHoraAntes: e.target.checked }))} />1 hora antes</label>}
+          <div className="space-y-2">
+            {recordatorios.map((item, index) => <div key={index} className="flex items-center gap-2">
+              <input aria-label={`Cantidad del recordatorio ${index + 1}`} type="number" min="1" max="525600" step="1" value={item.cantidad || ''} onChange={e => setRecordatorios(items => items.map((r, i) => i === index ? { ...r, cantidad: Number(e.target.value) } : r))} className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm" />
+              <select aria-label={`Unidad del recordatorio ${index + 1}`} value={item.unidad} onChange={e => setRecordatorios(items => items.map((r, i) => i === index ? { ...r, unidad: e.target.value as RecordatorioEvento['unidad'] } : r))} className="min-w-0 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm">{['minutos', 'horas', 'días', 'semanas'].map(unit => <option key={unit}>{unit}</option>)}</select>
+              <span className="text-xs">antes</span><button type="button" aria-label={`Eliminar recordatorio ${index + 1}`} onClick={() => setRecordatorios(items => items.filter((_, i) => i !== index))} className="rounded p-2 text-slate-600 hover:bg-slate-100">×</button>
+            </div>)}
+            <button type="button" disabled={recordatorios.length >= 10} onClick={() => setRecordatorios(items => [...items, { cantidad: 30, unidad: 'minutos' }])} className="py-2 text-sm font-semibold text-brand-900 disabled:opacity-50">+ Añadir recordatorio</button>
           </div>
-          <p className="mt-2 text-xs text-slate-500">Configura estos avisos en Google Calendar antes de guardar.</p>
+          {!hora && <p className="mt-2 text-xs text-slate-500">Sin hora, los avisos se calculan desde el inicio del día en Bolivia.</p>}
+          <p className="mt-2 text-xs text-slate-500">Estos avisos aparecen en AbogadosPro. En Google Calendar, configura los mismos avisos antes de guardar; el enlace no los activa automáticamente.</p>
         </fieldset>
         <button type="button" onClick={(e) => { if (formRef.current?.reportValidity()) void handleSubmit(e, true); }} disabled={isSubmitting || availableCases.length === 0} className="inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-900 hover:bg-brand-50 disabled:opacity-50"><Calendar className="h-4 w-4" aria-hidden="true" />Agregar a Google Calendar</button>
 

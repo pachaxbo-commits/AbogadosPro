@@ -12,6 +12,7 @@ import {
   DocumentData,
   type Firestore,
 } from 'firebase/firestore';
+import { validateTask } from '../services/tasks';
 import { db } from '../services/firebaseConfig';
 import { ILegalRepository } from './types';
 import {
@@ -35,7 +36,7 @@ function sanitizeForFirestore(data: object): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined) {
-      sanitized[key] = value;
+      sanitized[key] = Array.isArray(value) ? value.map(item => item && typeof item === 'object' ? sanitizeForFirestore(item) : item) : value && typeof value === 'object' ? sanitizeForFirestore(value) : value;
     }
   }
   return sanitized;
@@ -347,7 +348,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...pagoData,
       id,
     };
-    await updateDoc(docRef, sanitizeForFirestore(pagoData as Record<string, unknown>));
+    await setDoc(docRef, sanitizeForFirestore(updated));
     return updated;
   }
 
@@ -394,7 +395,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...gastoData,
       id,
     };
-    await updateDoc(docRef, sanitizeForFirestore(gastoData as Record<string, unknown>));
+    await setDoc(docRef, sanitizeForFirestore(updated));
     return updated;
   }
 
@@ -441,7 +442,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...reembolsoData,
       id,
     };
-    await updateDoc(docRef, sanitizeForFirestore(reembolsoData as Record<string, unknown>));
+    await setDoc(docRef, sanitizeForFirestore(updated));
     return updated;
   }
 
@@ -476,6 +477,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
   }
 
   async addTask(data: DatosTarea): Promise<Tarea> {
+  data = validateTask(data, (await this.getCases()).map(caso => caso.id));
   const docRef = doc(this.tasksCol);
   const stamp = new Date().toISOString();
 
@@ -493,6 +495,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
 
   async updateTask(id: string, data: DatosTarea): Promise<Tarea> {
+  data = validateTask(data, (await this.getCases()).map(caso => caso.id));
   const docRef = doc(this.tasksCol, id);
   const snap = await getDoc(docRef);
 

@@ -1,8 +1,10 @@
+import { FinancialDonut } from '../components/finances/FinancialDonut';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { StatCard } from '../components/common/StatCard';
-import { formatBs, formatFecha } from '../services/formatters';
+import { financialDate, compareFinancialDate } from '../services/finance';
+import { formatBs } from '../services/formatters';
 import {
   Wallet,
   Clock,
@@ -40,6 +42,7 @@ export const FinancesPage: React.FC = () => {
         titulo: 'Cobro de Honorarios',
         monto: p.monto,
         fecha: p.fecha,
+        hora: p.hora,
         nota: p.nota,
         casoId: p.casoId,
         casoNombre: caseMap.get(p.casoId)?.nombre || 'Caso',
@@ -51,6 +54,7 @@ export const FinancesPage: React.FC = () => {
         titulo: g.concepto,
         monto: g.monto,
         fecha: g.fecha,
+        hora: g.hora,
         nota: g.nota,
         casoId: g.casoId,
         casoNombre: caseMap.get(g.casoId)?.nombre || 'Caso',
@@ -62,6 +66,7 @@ export const FinancesPage: React.FC = () => {
         titulo: 'Reembolso de gasto',
         monto: r.monto,
         fecha: r.fecha,
+        hora: r.hora,
         nota: r.nota,
         casoId: r.casoId,
         casoNombre: caseMap.get(r.casoId)?.nombre || 'Caso',
@@ -69,7 +74,7 @@ export const FinancesPage: React.FC = () => {
       })),
     ];
 
-    return list.sort((a, b) => b.fecha.localeCompare(a.fecha));
+    return list.sort((a, b) => compareFinancialDate(a, b));
   }, [payments, expenses, reimbursements, cases]);
 
   const isCasesView = selectedMetric !== 'cobrado' && selectedMetric !== 'gastos';
@@ -144,6 +149,7 @@ export const FinancesPage: React.FC = () => {
       </div>
 
       {/* Grid de Secciones: Saldos Pendientes y Movimientos Recientes */}
+      <FinancialDonut totals={financialTotals} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* SECCIÓN 1: SALDOS PENDIENTES (2 columnas) */}
         {isCasesView && <div id="saldos-pendientes" className={`${selectedMetric ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-4 scroll-mt-28`}>
@@ -260,7 +266,7 @@ export const FinancesPage: React.FC = () => {
                       {isPago ? 'Cobro Recibido' : mov.tipo === 'reembolso' ? 'Reembolso de gasto' : 'Gasto Operativo'}
                     </span>
                     <span className="text-[11px] font-mono text-slate-500 whitespace-nowrap">
-                      {formatFecha(mov.fecha)}
+                      {financialDate(mov)}
                     </span>
                   </div>
 

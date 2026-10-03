@@ -1,4 +1,5 @@
 import type { Caso, Cliente, Evento } from '../types';
+import { configuredReminders, reminderLabel } from './reminders';
 import { eventState } from './eventResults';
 
 // Se podrá sustituir por la configuración del estudio al incorporar usuarios.
@@ -33,6 +34,8 @@ export function toCalendarEvent(event: Evento, caso?: Caso, cliente?: Cliente, c
   add('Área', caso?.area);
   if (caso?.tipoIdentificacionJudicial) add(caso.tipoIdentificacionJudicial, caso.numeroIdentificacionJudicial);
   if (event.descripcion?.trim()) lines.push(`\nNotas:\n${event.descripcion.trim()}`);
+  const reminders = configuredReminders(event);
+  if (reminders.length) lines.push('\nRecordatorios a configurar en Google Calendar: ' + reminders.map(reminderLabel).join(', ') + '.');
   lines.push('\nGenerado desde AbogadosPro.');
 
   // Aritmética de calendario en UTC, sin convertir la hora civil a la zona del dispositivo.
