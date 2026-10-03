@@ -1,4 +1,4 @@
-export type Appearance = 'light' | 'dark';
+export type Appearance = 'light' | 'dark' | 'system';
 export interface AppearanceRepository {
   get(userId: string): Appearance;
   save(userId: string, appearance: Appearance): void;
@@ -6,7 +6,7 @@ export interface AppearanceRepository {
 const key = (userId: string) => `abogadospro_appearance_v1:${encodeURIComponent(userId)}`;
 export const appearanceRepository: AppearanceRepository = {
   get(userId) {
-    try { return localStorage.getItem(key(userId)) === 'dark' ? 'dark' : 'light'; }
+    try { const value = localStorage.getItem(key(userId)); return value === 'dark' || value === 'system' ? value : 'light'; }
     catch { return 'light'; }
   },
   save(userId, appearance) {

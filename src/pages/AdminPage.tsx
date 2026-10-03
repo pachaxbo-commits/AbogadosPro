@@ -120,12 +120,12 @@ export const AdminPage: React.FC = () => {
     <div className="space-y-6">
       {/* Encabezado */}
       <div className="bg-brand-900 rounded-xl p-6 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3.5">
+        <div className="flex min-w-0 items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-brand-800 border border-brand-700 flex items-center justify-center text-amber-300">
             <Shield className="w-6 h-6" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-serif font-bold text-white leading-tight">
                 Panel de Administración
               </h1>
@@ -139,7 +139,7 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={fetchUsers}
@@ -157,7 +157,7 @@ export const AdminPage: React.FC = () => {
               setActionSuccess(null);
               setShowCreateModal(true);
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-brand-950 text-xs font-semibold shadow-xs transition-colors"
+            className="inline-flex min-w-0 items-center gap-2 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-brand-950 text-xs font-semibold shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>Crear Cuenta de Cortesía (Trial)</span>
@@ -173,7 +173,7 @@ export const AdminPage: React.FC = () => {
       )}
 
       {/* Tarjetas Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -219,8 +219,8 @@ export const AdminPage: React.FC = () => {
       </div>
 
       {/* Barra de Filtro */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+        <div className="relative min-w-0 flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
           <input
             type="text"
@@ -238,7 +238,7 @@ export const AdminPage: React.FC = () => {
       {/* Tabla de Usuarios */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="mobile-data-table w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-semibold">
               <tr>
                 <th className="px-4 py-3">Abogado / Estudio</th>
@@ -281,10 +281,10 @@ export const AdminPage: React.FC = () => {
                           <div className="text-[11px] text-slate-500">{u.studioName}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-mono text-[11px] text-slate-700">
+                      <td data-label="Correo" className="px-4 py-3 font-mono text-[11px] text-slate-700">
                         {u.email}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Rol" className="px-4 py-3">
                         {u.role === 'admin' ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-brand-100 text-brand-900 border border-brand-200">
                             Admin
@@ -295,7 +295,7 @@ export const AdminPage: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Cuenta" className="px-4 py-3">
                         {u.accountType === 'trial' ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-200">
                             <Gift className="w-3 h-3 text-amber-600" />
@@ -311,7 +311,7 @@ export const AdminPage: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Facturación" className="px-4 py-3">
                         {u.billingExempt ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             Exento de cobro
@@ -322,10 +322,10 @@ export const AdminPage: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
+                      <td data-label="Workspace" className="px-4 py-3 font-mono text-[10px] text-slate-500">
                         {u.workspaceId?.slice(0, 10)}...
                       </td>
-                      <td className="px-4 py-3 text-slate-500 text-[11px]">
+                      <td data-label="Alta" className="px-4 py-3 text-slate-500 text-[11px]">
                         {u.createdAt ? u.createdAt.split('T')[0] : '—'}
                       </td>
                     </tr>
@@ -339,8 +339,8 @@ export const AdminPage: React.FC = () => {
 
       {/* Modal de Creación de Cuenta Trial / Cortesía */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-2xs p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-2xs p-2 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[calc(100dvh-1rem)] border border-slate-200 overflow-y-auto">
             <div className="bg-brand-900 px-6 py-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Gift className="w-5 h-5 text-amber-300" />

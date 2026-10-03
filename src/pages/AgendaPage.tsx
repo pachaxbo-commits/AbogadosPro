@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
+import { useProfile } from '../context/ProfileContext';
 import { EventCard } from '../components/events/EventCard';
 import { EventFormModal } from '../components/events/EventFormModal';
 import { Evento } from '../types';
@@ -21,6 +22,7 @@ type DateFilter = 'sin_filtro' | 'hoy' | 'semana' | 'mes' | 'rango';
 
 export const AgendaPage: React.FC = () => {
   const { events, eventsWithCase } = useLegalData();
+  const { assignees } = useProfile();
   const now = useTaskClock();
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState<FilterType>(() => {
@@ -32,6 +34,7 @@ export const AgendaPage: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<DateFilter>('sin_filtro');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [encargadoId, setEncargadoId] = useState('');
 
   const hoyStr = taskToday(now);
   const today = new Date(`${hoyStr}T00:00:00Z`);
@@ -50,6 +53,7 @@ export const AgendaPage: React.FC = () => {
         (dateFilter === 'mes' && ev.fecha.startsWith(hoyStr.slice(0, 7))) ||
         (dateFilter === 'rango' && (!dateFrom || ev.fecha >= dateFrom) && (!dateTo || ev.fecha <= dateTo));
       if (!matchesDate) return false;
+      if (encargadoId && (encargadoId === '__unassigned__' ? Boolean(ev.encargadoId) : ev.encargadoId !== encargadoId)) return false;
       switch (filter) {
         case 'hoy':
           return ev.fecha === hoyStr;
@@ -68,7 +72,7 @@ export const AgendaPage: React.FC = () => {
           return true;
       }
     });
-  }, [eventsWithCase, filter, hoyStr, weekStart, weekEnd, dateFilter, dateFrom, dateTo, now]);
+  }, [eventsWithCase, filter, hoyStr, weekStart, weekEnd, dateFilter, dateFrom, dateTo, encargadoId, now]);
 
   const countHoy = eventsWithCase.filter((e) => e.fecha === hoyStr).length;
   const countAudiencias = eventsWithCase.filter((e) => e.tipo === 'Audiencia' && e.fecha >= hoyStr && eventState(e) === 'Próximo').length;
@@ -191,6 +195,12 @@ export const AgendaPage: React.FC = () => {
           <option value="semana">Esta semana</option>
           <option value="mes">Este mes</option>
           <option value="rango">Rango personalizado</option>
+        </select>
+        <label htmlFor="agenda-encargado" className="ml-2 text-xs font-semibold text-slate-600">Encargado:</label>
+        <select id="agenda-encargado" value={encargadoId} onChange={(e) => setEncargadoId(e.target.value)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900">
+          <option value="">Todos</option>
+          <option value="__unassigned__">Sin encargado</option>
+          {assignees.map((item) => <option key={item.id} value={item.id}>{item.nombre}{item.estado === 'Inactivo' ? ' (inactivo)' : ''}</option>)}
         </select>
         {dateFilter === 'rango' && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">

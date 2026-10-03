@@ -15,8 +15,8 @@ export function validateReminders(items: RecordatorioEvento[]): RecordatorioEven
     return { ...item };
   });
 }
-export function configuredReminders(event?: Pick<Evento, 'hora' | 'recordatorios'>): RecordatorioEvento[] {
-  if (!event) return [{ cantidad: 1, unidad: 'días' }, { cantidad: 1, unidad: 'horas' }];
+export function configuredReminders(event?: Pick<Evento, 'hora' | 'recordatorios'>, defaultReminder?: RecordatorioEvento): RecordatorioEvento[] {
+  if (!event) return defaultReminder ? [{ ...defaultReminder }] : [{ cantidad: 1, unidad: 'días' }, { cantidad: 1, unidad: 'horas' }];
   if (event.recordatorios?.personalizados) return event.recordatorios.personalizados;
   const items: RecordatorioEvento[] = [];
   if (event.recordatorios?.unDiaAntes) items.push({ cantidad: 1, unidad: 'días' });

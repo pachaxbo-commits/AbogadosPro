@@ -13,3 +13,11 @@ export function financialComposition(totals: { totalCobrado: number; totalGastos
   const porCobrar = totals.saldoPendiente + totals.gastosPendientes;
   return { utilidad, gastos, porCobrar };
 }
+
+export function financialDonutComposition(totals: Parameters<typeof financialComposition>[0]) {
+  const { utilidad, porCobrar, gastos } = financialComposition(totals);
+  // El gasto reembolsable pendiente ya integra Por cobrar; el recibido ya recuperó caja.
+  // Solo los gastos que no recuperará el estudio forman Gastos/Pérdida.
+  const perdida = Math.max(0, gastos - totals.gastosPendientes);
+  return { utilidad, porCobrar, perdida };
+}

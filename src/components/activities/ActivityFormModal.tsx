@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
+import { useProfile } from '../../context/ProfileContext';
 import { TipoActividad } from '../../types';
 
 interface ActivityFormModalProps {
@@ -17,8 +18,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   onSuccess,
 }) => {
   const { addActivity } = useLegalData();
+  const { configuration } = useProfile();
 
-  const [tipo, setTipo] = useState<TipoActividad>('Memorial presentado');
+  const [tipo, setTipo] = useState<TipoActividad>(configuration.categories.activities[0]);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
@@ -88,12 +90,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             onChange={(e) => setTipo(e.target.value as TipoActividad)}
             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900 bg-white"
           >
-            <option value="Memorial presentado">Memorial presentado</option>
-            <option value="Notificación recibida">Notificación recibida</option>
-            <option value="Audiencia realizada">Audiencia realizada</option>
-            <option value="Documento presentado">Documento presentado</option>
-            <option value="Reunión con cliente">Reunión con cliente</option>
-            <option value="Nota interna">Nota interna</option>
+            {configuration.categories.activities.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </div>
 

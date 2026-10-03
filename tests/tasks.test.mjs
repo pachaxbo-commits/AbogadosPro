@@ -10,7 +10,7 @@ const task = (extra = {}) => ({ ...draft, id: 't1', estado: 'Pendiente', created
 const key = 'abogadospro_tasks_v1';
 function storage() {
   const values = new Map();
-  const store = { getItem: (k) => values.get(k) ?? null, setItem: (k, v) => values.set(k, v) };
+  const store = { getItem: (k) => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: (k) => values.delete(k) };
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: store });
   return { store, values };
 }

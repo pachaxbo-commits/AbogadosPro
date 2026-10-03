@@ -51,14 +51,15 @@ export const ClientsPage: React.FC = () => {
   }, [clientsWithSummary, casesWithDetails, searchTerm, selectedEstado, selectedArea]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-brand-800 bg-brand-900 px-5 py-6 text-white shadow-sm sm:flex-row sm:items-center sm:px-7">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <span className="mb-3 block h-0.5 w-9 bg-amber-400" aria-hidden="true" />
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Cartera de Clientes
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="mt-2 text-sm text-slate-200">
             Gestión de patrocinados particulares y corporativos
           </p>
         </div>
@@ -66,40 +67,35 @@ export const ClientsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 rounded-md transition-colors shadow-xs"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-amber-400 bg-amber-400 px-4 py-2.5 text-sm font-bold text-brand-950 transition-colors hover:bg-amber-300"
         >
           <UserPlus className="w-4 h-4" />
           <span>Nuevo Cliente</span>
         </button>
       </div>
 
-      {/* Barra de búsqueda */}
-      <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
-        <Search className="w-4 h-4 text-slate-400 ml-1 shrink-0" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Buscar por nombre, CI, NIT, teléfono o correo..."
-          className="w-full text-sm placeholder-slate-400 bg-transparent focus:outline-hidden"
-        />
-        {searchTerm && (
-          <button
-            onClick={() => setSearchTerm('')}
-            className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1"
-          >
-            Limpiar
-          </button>
-        )}
-      </div>
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-xs sm:p-4">
+        {/* Barra de búsqueda */}
+        <div className="flex min-h-11 items-center gap-3 rounded-md border border-slate-200 px-3 focus-within:border-brand-500">
+          <Search className="h-4 w-4 shrink-0 text-brand-700" />
+          <input
+            type="text"
+            aria-label="Buscar clientes"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por nombre, CI, NIT, teléfono o correo..."
+            className="min-w-0 w-full bg-transparent text-sm placeholder-slate-400 focus:outline-hidden"
+          />
+          {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="min-h-9 rounded px-2 text-xs font-medium text-brand-900 hover:bg-brand-50">Limpiar</button>}
+        </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
         <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
           Estado
           <select
             value={selectedEstado}
             onChange={(e) => setSelectedEstado(e.target.value as EstadoFiltro)}
-            className="px-2.5 py-2 text-xs border border-slate-200 rounded-md bg-white text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
+            className="min-h-10 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
           >
             <option value="Todos">Todos</option>
             <option value="Con casos activos">Con casos activos</option>
@@ -111,7 +107,7 @@ export const ClientsPage: React.FC = () => {
           <select
             value={selectedArea}
             onChange={(e) => setSelectedArea(e.target.value as AreaFiltro)}
-            className="px-2.5 py-2 text-xs border border-slate-200 rounded-md bg-white text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
+            className="min-h-10 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
           >
             <option value="Todas">Todas</option>
             <option value="Civil">Civil</option>
@@ -120,12 +116,14 @@ export const ClientsPage: React.FC = () => {
             <option value="Laboral">Laboral</option>
           </select>
         </label>
+        <span className="ml-auto text-xs font-medium text-slate-500">{filteredClients.length} {filteredClients.length === 1 ? 'cliente' : 'clientes'}</span>
+        </div>
       </div>
 
       {/* Tabla en Desktop / Tarjetas en Móvil */}
       {filteredClients.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg border border-slate-200 p-6">
-          <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-xs">
+          <Users className="mx-auto mb-3 h-9 w-9 text-brand-700" />
           <p className="text-sm font-semibold text-slate-700">{searchTerm || selectedEstado !== 'Todos' || selectedArea !== 'Todas' ? 'No se encontraron clientes' : 'No hay clientes registrados todavía.'}</p>
           <p className="text-xs text-slate-500 mt-1">
             {searchTerm || selectedEstado !== 'Todos' || selectedArea !== 'Todas'
@@ -134,24 +132,24 @@ export const ClientsPage: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
           <div className="overflow-x-auto">
             <table className="mobile-data-table w-full text-left text-sm divide-y divide-slate-200">
-              <thead className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+              <thead className="bg-brand-50/50 text-brand-900 text-xs font-semibold uppercase tracking-wider">
                 <tr>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-4 py-3">
                     Cliente / Razón Social
                   </th>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-4 py-3">
                     Contacto
                   </th>
-                  <th scope="col" className="px-5 py-3.5 text-center">
+                  <th scope="col" className="px-4 py-3 text-center">
                     Casos
                   </th>
-                  <th scope="col" className="px-5 py-3.5 text-right">
+                  <th scope="col" className="px-4 py-3 text-right">
                     Total pendiente
                   </th>
-                  <th scope="col" className="px-5 py-3.5 text-right">
+                  <th scope="col" className="px-4 py-3 text-right">
                     Acción
                   </th>
                 </tr>
@@ -165,9 +163,9 @@ export const ClientsPage: React.FC = () => {
                     role="link"
                     aria-label={`Ver cliente ${cliente.nombre}`}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/clientes/${cliente.id}`); } }}
-                    className="hover:bg-slate-50/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-900 cursor-pointer transition-colors"
+                    className="group cursor-pointer select-none transition-colors hover:bg-brand-50/60 focus-visible:bg-brand-50/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-900"
                   >
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-3">
                       <div className="font-semibold text-slate-900">{cliente.nombre}</div>
                       {cliente.identificacion && (
                         <div className="text-xs text-slate-500 font-mono mt-0.5">
@@ -176,7 +174,7 @@ export const ClientsPage: React.FC = () => {
                       )}
                     </td>
 
-                    <td data-label="Contacto" className="px-5 py-4 text-xs text-slate-600">
+                    <td data-label="Contacto" className="px-4 py-3 text-xs text-slate-600">
                       {cliente.telefono && <div className="flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5 text-slate-400" />
                         <span>{cliente.telefono}</span>
@@ -189,9 +187,9 @@ export const ClientsPage: React.FC = () => {
                       )}
                     </td>
 
-                    <td data-label="Casos" className="px-5 py-4 text-center">
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
-                        <Briefcase className="w-3 h-3 text-slate-500" />
+                    <td data-label="Casos" className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-brand-100 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-900">
+                        <Briefcase className="h-3 w-3 text-brand-700" />
                         <span>
                           {cliente.casosTotal} {cliente.casosTotal === 1 ? 'caso' : 'casos'}
                         </span>
@@ -202,7 +200,7 @@ export const ClientsPage: React.FC = () => {
                       </span>
                     </td>
 
-                    <td data-label="Pendiente" className="px-5 py-4 text-right">
+                    <td data-label="Pendiente" className="px-4 py-3 text-right">
                       <span
                         className={`text-sm font-semibold font-mono ${
                           cliente.saldoPendienteTotal > 0
@@ -214,8 +212,8 @@ export const ClientsPage: React.FC = () => {
                       </span>
                     </td>
 
-                    <td data-label="Acción" className="px-5 py-4 text-right">
-                      <span className="inline-flex items-center text-xs font-semibold text-brand-900 group-hover:text-brand-700">
+                    <td data-label="Acción" className="px-4 py-3 text-right">
+                      <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold text-brand-900 transition-colors group-hover:bg-brand-100">
                         Ver cliente →
                       </span>
                     </td>

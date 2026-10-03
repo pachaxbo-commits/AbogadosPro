@@ -520,7 +520,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
   return updated;
 }
 
-  async setTaskStatus(id: string, estado: EstadoTarea): Promise<Tarea> {
+  async setTaskStatus(id: string, estado: EstadoTarea, resultadoFinalizacion?: string): Promise<Tarea> {
   const docRef = doc(this.tasksCol, id);
   const snap = await getDoc(docRef);
 
@@ -548,6 +548,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
     estado,
     updatedAt: stamp,
     completedAt: estado === 'Completada' ? stamp : undefined,
+    resultadoFinalizacion: estado === 'Completada' ? resultadoFinalizacion?.trim() || undefined : current.resultadoFinalizacion,
   };
 
   await setDoc(docRef, sanitizeForFirestore(updated));

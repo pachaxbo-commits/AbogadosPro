@@ -2,6 +2,7 @@ import React from 'react';
 import { EventMenu } from './EventMenu';
 import { Link } from 'react-router-dom';
 import { EventoConCaso } from '../../types';
+import { useProfile } from '../../context/ProfileContext';
 import { formatFecha, formatHora } from '../../services/formatters';
 import { AlertBadge } from '../common/AlertBadge';
 import { AreaBadge } from '../common/StatusBadge';
@@ -28,6 +29,7 @@ export const EventCard: React.FC<EventCardProps> = ({
   summary = false,
   onEdit,
 }) => {
+  const { assignees } = useProfile();
   const interactive = Boolean(onEdit);
   const getTipoStyle = (tipo: string) => {
     switch (tipo) {
@@ -79,6 +81,7 @@ export const EventCard: React.FC<EventCardProps> = ({
       </div>
 
       <h3 className={`font-semibold text-slate-900 break-words ${summary ? 'text-base mb-4' : 'text-sm mb-1'}`}>{evento.titulo}</h3>
+      {!summary && evento.encargadoId && <p className="mb-2 text-xs text-slate-600">Encargado: <span className="font-medium text-brand-900">{assignees.find((item) => item.id === evento.encargadoId)?.nombre || 'No disponible'}</span></p>}
       {interactive && <EventResultAction event={evento} />}
 
       {!summary && evento.juzgado && (

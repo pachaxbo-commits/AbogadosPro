@@ -1,4 +1,4 @@
-export type AreaCaso = 'Civil' | 'Penal' | 'Familiar' | 'Laboral';
+export type AreaCaso = string;
 
 export type EstadoCaso = 'Activo' | 'En trámite' | 'En espera' | 'Concluido';
 
@@ -13,21 +13,9 @@ export type ParticipacionCaso =
 
 export type TipoIdentificacionJudicial = 'NUREJ' | 'CUD';
 
-export type TipoActividad =
-  | 'Memorial presentado'
-  | 'Notificación recibida'
-  | 'Audiencia realizada'
-  | 'Documento presentado'
-  | 'Reunión con cliente'
-  | 'Nota interna';
+export type TipoActividad = string;
 
-export type TipoEvento =
-  | 'Audiencia'
-  | 'Plazo'
-  | 'Actuado'
-  | 'Reunión'
-  | 'Recordatorio'
-  | 'Otro';
+export type TipoEvento = string;
 
 export type PrioridadTarea = 'Alta' | 'Media' | 'Normal';
 export type EstadoTarea = 'Pendiente' | 'Completada';
@@ -35,6 +23,7 @@ export type EstadoTarea = 'Pendiente' | 'Completada';
 export interface Tarea {
   id: string;
   casoId: string;
+  encargadoId?: string;
   titulo: string;
   descripcion?: string;
   fechaLimite: string; // Fecha ingresada por el usuario, YYYY-MM-DD (Bolivia).
@@ -44,9 +33,10 @@ export interface Tarea {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  resultadoFinalizacion?: string;
 }
 
-export type DatosTarea = Pick<Tarea, 'casoId' | 'titulo' | 'descripcion' | 'fechaLimite' | 'horaLimite' | 'prioridad'>;
+export type DatosTarea = Pick<Tarea, 'casoId' | 'encargadoId' | 'titulo' | 'descripcion' | 'fechaLimite' | 'horaLimite' | 'prioridad'>;
 
 export interface DocumentoCaso {
   id: string;
@@ -60,8 +50,9 @@ export interface DocumentoCaso {
   mimeType: string;
   tamano: number;
   referenciaArchivo: string;
+  taskId?: string;
 }
-export type DatosDocumento = Pick<DocumentoCaso, 'nombre' | 'categoria' | 'descripcion' | 'fechaDocumento'>;
+export type DatosDocumento = Pick<DocumentoCaso, 'nombre' | 'categoria' | 'descripcion' | 'fechaDocumento' | 'taskId'>;
 
 export interface Cliente {
   id: string;
@@ -79,6 +70,8 @@ export interface Caso {
   id: string;
   nombre: string;
   clienteId: string;
+  encargadoId?: string;
+  seguimientoDias?: number | null; // Ausente en casos anteriores: 30 días; null: sin seguimiento.
   area: AreaCaso;
   estado: EstadoCaso;
   participacion: ParticipacionCaso;
@@ -120,6 +113,7 @@ export interface RecordatorioEvento { cantidad: number; unidad: 'minutos' | 'hor
 export interface Evento {
   id: string;
   casoId: string;
+  encargadoId?: string;
   tipo: TipoEvento;
   titulo: string;
   fecha: string; // YYYY-MM-DD
@@ -147,6 +141,7 @@ export interface Gasto {
   id: string;
   casoId: string;
   concepto: string;
+  categoria?: string;
   monto: number; // en Bs
   fecha: string;
   hora?: string; // HH:mm; opcional para movimientos anteriores. // YYYY-MM-DD

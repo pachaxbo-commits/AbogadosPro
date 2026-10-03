@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { currentFinanceTime, validFinanceTime } from '../../services/finance';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
+import { useProfile } from '../../context/ProfileContext';
 import { Gasto } from '../../types';
 import { formatBs, getLocalTodayIsoString } from '../../services/formatters';
 
@@ -21,18 +22,19 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   gasto,
 }) => {
   const { addExpense, updateExpense, getCaseWithDetails } = useLegalData();
+  const { configuration } = useProfile();
+  const quickConcepts = configuration.categories.expenses;
 
   const [concepto, setConcepto] = useState(gasto?.concepto ?? '');
+  const [categoria, setCategoria] = useState(gasto?.categoria ?? '');
   const [monto, setMonto] = useState<string>(gasto ? String(gasto.monto) : '');
   const [fecha, setFecha] = useState(() => gasto?.fecha ?? getLocalTodayIsoString());
   const [hora, setHora] = useState(() => gasto ? gasto.hora || '' : currentFinanceTime());
   const [nota, setNota] = useState(gasto?.nota ?? '');
-  const [reembolsable, setReembolsable] = useState(gasto?.reembolsable === true);
+  const [reembolsable, setReembolsable] = useState(gasto ? gasto.reembolsable === true : configuration.expensesReimbursableByDefault);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const submittingRef = useRef(false);
-
-  const quickConcepts = ['Fotocopias', 'Notaría', 'Transporte', 'Timbres judiciales', 'Peritaje'];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +68,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       const data = {
         casoId,
         concepto: concepto.trim(),
+        categoria: categoria || undefined,
         monto: parsedMonto,
         fecha,
         hora: hora || undefined,
@@ -76,6 +79,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       else await addExpense(data);
 
       setConcepto('');
+      setCategoria('');
       setMonto('');
       setNota('');
       onSuccess?.();
@@ -108,6 +112,8 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           </div>
         )}
 
+        <div><label htmlFor="expense-category" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Categoría del gasto (opcional)</label><select id="expense-category" value={categoria} onChange={(event) => setCategoria(event.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Sin categoría</option>{[...new Set([...quickConcepts, ...(gasto?.categoria && !quickConcepts.includes(gasto.categoria) ? [gasto.categoria] : [])])].map((value) => <option key={value}>{value}</option>)}</select></div>
+
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
             Concepto del Gasto <span className="text-rose-500">*</span>
@@ -127,7 +133,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               <button
                 key={item}
                 type="button"
-                onClick={() => { setConcepto(item); setError(''); }}
+                onClick={() => { setConcepto(item); setCategoria(item); setError(''); }}
                 className="cursor-pointer text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700 transition-colors"
               >
                 + {item}

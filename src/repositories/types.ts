@@ -5,7 +5,7 @@ export interface ILegalRepository {
   getTasks(casoId?: string): Promise<Tarea[]>;
   addTask(data: DatosTarea): Promise<Tarea>;
   updateTask(id: string, data: DatosTarea): Promise<Tarea>;
-  setTaskStatus(id: string, estado: EstadoTarea): Promise<Tarea>;
+  setTaskStatus(id: string, estado: EstadoTarea, resultadoFinalizacion?: string): Promise<Tarea>;
   deleteTask(id: string): Promise<void>;
   // Clientes
   getClients(): Promise<Cliente[]>;

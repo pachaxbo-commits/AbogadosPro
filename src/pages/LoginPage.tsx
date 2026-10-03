@@ -68,11 +68,11 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-6 px-0 sm:px-6 lg:px-8">
       <div className="max-w-4xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         
         {/* Columna Izquierda: Información de Marca e Identidad Editorial */}
-        <div className="lg:col-span-5 bg-brand-900 rounded-2xl p-8 text-white flex flex-col justify-between shadow-xl relative overflow-hidden">
+        <div className="order-2 rounded-2xl bg-brand-900 p-5 text-white shadow-xl relative flex flex-col justify-between overflow-hidden sm:p-8 lg:order-1 lg:col-span-5">
           <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-brand-800/40 rounded-full blur-3xl pointer-events-none" />
           
           <div className="relative z-10 space-y-6">
@@ -81,7 +81,7 @@ export const LoginPage: React.FC = () => {
                 <Scale className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="font-serif text-2xl font-bold tracking-tight text-white leading-tight">
+                <h1 className="font-serif text-xl font-bold tracking-tight text-white leading-tight whitespace-nowrap sm:text-2xl">
                   Abogados<span className="text-amber-300 font-sans font-semibold">Pro</span>
                 </h1>
                 <p className="text-[11px] uppercase tracking-wider text-brand-200 font-medium">
@@ -136,7 +136,7 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Columna Derecha: Tarjeta de Acceso y Acciones */}
-        <div className="lg:col-span-7 bg-white rounded-2xl p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div className="order-1 flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-8 lg:order-2 lg:col-span-7">
           <div className="space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <h2 className="text-xl font-serif font-bold text-slate-900">
@@ -215,7 +215,7 @@ export const LoginPage: React.FC = () => {
             </form>
 
             {/* VÍA 2: Registro Público Gratuito */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+            <div className="flex flex-col items-start gap-2 border-t border-slate-100 pt-4 text-xs sm:flex-row sm:items-center sm:justify-between">
               <span className="text-slate-600">¿Aún no tiene cuenta en AbogadosPro?</span>
               <Link
                 to="/registro"
@@ -257,8 +257,8 @@ export const LoginPage: React.FC = () => {
 
       {/* Modal de Recuperación de Contraseña */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-2xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-2xs p-2 sm:p-4">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
             <div className="bg-brand-900 px-6 py-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <HelpCircle className="w-5 h-5 text-amber-300" />

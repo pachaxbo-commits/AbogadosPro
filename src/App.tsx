@@ -1,6 +1,7 @@
 import React, { useLayoutEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import { LegalDataProvider } from './context/LegalDataContext';
 import { ProfileProvider } from './context/ProfileContext';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
@@ -14,8 +15,11 @@ import { CaseDetailPage } from './pages/CaseDetailPage';
 import { AgendaPage } from './pages/AgendaPage';
 import { TasksPage } from './pages/TasksPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { ImportDataPage } from './pages/ImportDataPage';
 import { FinancesPage } from './pages/FinancesPage';
 import { LoginPage } from './pages/LoginPage';
+import { LandingPage } from './pages/LandingPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AdminPage } from './pages/AdminPage';
 import { BRAND_CONFIG } from './config/brand';
@@ -32,33 +36,26 @@ function MobileNavigationPosition() {
   return null;
 }
 
-export function App() {
+function AppContent() {
+  const { pathname } = useLocation();
+  const { currentUser, isDemo, loading } = useAuth();
+  const showLanding = pathname === '/' && !loading && !currentUser && !isDemo;
+
   return (
-    <AuthProvider>
-      <LegalDataProvider>
-        <ProfileProvider>
-          <BrowserRouter>
+    <>
             <MobileNavigationPosition />
 
             <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-brand-100 selection:text-brand-900">
-              <Navbar />
+              {!showLanding && <Navbar />}
 
-              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+              <main className={showLanding ? 'flex-1 w-full' : 'flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8'}>
                 <Routes>
                   {/* Rutas públicas */}
+                  <Route path="/" element={loading || currentUser || isDemo ? <ProtectedRoute><DashboardPage /></ProtectedRoute> : <LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/registro" element={<RegisterPage />} />
 
                   {/* Rutas protegidas */}
-                  <Route
-                    path="/"
-                    element={
-                      <ProtectedRoute>
-                        <DashboardPage />
-                      </ProtectedRoute>
-                    }
-                  />
-
                   <Route
                     path="/clientes"
                     element={
@@ -123,6 +120,17 @@ export function App() {
                   />
 
                   <Route
+                    path="/configuracion"
+                    element={
+                      <ProtectedRoute>
+                        <SettingsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route path="/importar-datos" element={<ProtectedRoute><ImportDataPage /></ProtectedRoute>} />
+
+                  <Route
                     path="/finanzas"
                     element={
                       <ProtectedRoute>
@@ -145,7 +153,7 @@ export function App() {
                 </Routes>
               </main>
 
-              <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+              {!showLanding && <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-800">
@@ -169,13 +177,14 @@ export function App() {
                     </a>
                   </div>
                 </div>
-              </footer>
+              </footer>}
             </div>
-          </BrowserRouter>
-        </ProfileProvider>
-      </LegalDataProvider>
-    </AuthProvider>
+    </>
   );
+}
+
+export function App() {
+  return <AuthProvider><LegalDataProvider><ProfileProvider><BrowserRouter><AppContent /></BrowserRouter></ProfileProvider></LegalDataProvider></AuthProvider>;
 }
 
 export default App;

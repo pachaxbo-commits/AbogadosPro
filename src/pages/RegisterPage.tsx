@@ -46,10 +46,10 @@ export const RegisterPage: React.FC = () => {
   const displayedError = localError || error;
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-6 px-0 sm:px-6 lg:px-8">
       <div className="max-w-xl w-full bg-white rounded-2xl border border-slate-200/80 shadow-md overflow-hidden">
         {/* Encabezado */}
-        <div className="bg-brand-900 p-6 sm:p-8 text-white">
+        <div className="bg-brand-900 p-4 sm:p-8 text-white">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-brand-800 border border-brand-700 flex items-center justify-center text-amber-300">
               <Scale className="w-5 h-5" />
@@ -66,7 +66,7 @@ export const RegisterPage: React.FC = () => {
         </div>
 
         {/* Formulario */}
-        <div className="p-6 sm:p-8 space-y-6">
+        <div className="p-4 sm:p-8 space-y-6">
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-600 space-y-1">

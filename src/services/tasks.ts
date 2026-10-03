@@ -22,7 +22,7 @@ export function validateTask(data: DatosTarea, caseIds: readonly string[]): Dato
   if (!validTaskDate(data.fechaLimite)) throw new Error('Ingresa una fecha límite válida.');
   if (data.horaLimite && !/^([01]\d|2[0-3]):[0-5]\d$/.test(data.horaLimite)) throw new Error('Ingresa una hora válida.');
   if (!['Alta', 'Media', 'Normal'].includes(data.prioridad)) throw new Error('Selecciona una prioridad válida.');
-  return { casoId: data.casoId, titulo: data.titulo.trim(), fechaLimite: data.fechaLimite, prioridad: data.prioridad, descripcion: data.descripcion?.trim() || undefined, horaLimite: data.horaLimite || undefined };
+  return { casoId: data.casoId, encargadoId: data.encargadoId || '', titulo: data.titulo.trim(), fechaLimite: data.fechaLimite, prioridad: data.prioridad, descripcion: data.descripcion?.trim() || undefined, horaLimite: data.horaLimite || undefined };
 }
 
 export function readStoredTask(value: unknown): Tarea {
@@ -31,7 +31,7 @@ export function readStoredTask(value: unknown): Tarea {
   for (const key of ['id', 'casoId', 'titulo', 'fechaLimite', 'prioridad', 'estado', 'createdAt', 'updatedAt']) {
     if (typeof item[key] !== 'string' || !item[key]) throw new Error('Tarea inválida');
   }
-  for (const key of ['descripcion', 'horaLimite', 'completedAt']) {
+  for (const key of ['descripcion', 'horaLimite', 'completedAt', 'resultadoFinalizacion', 'encargadoId']) {
     if (item[key] !== undefined && typeof item[key] !== 'string') throw new Error('Tarea inválida');
   }
   for (const key of ['createdAt', 'updatedAt', 'completedAt']) {

@@ -20,17 +20,17 @@ export function documentSize(bytes: number): string {
   return `${new Intl.NumberFormat('es-BO', { maximumFractionDigits: 1 }).format(bytes / (unit === 'MB' ? 1024 * 1024 : 1024))} ${unit}`;
 }
 export type DocumentErrors = Partial<Record<'nombre' | 'categoria' | 'fechaDocumento' | 'archivo', string>>;
-export function documentErrors(data: DatosDocumento): DocumentErrors {
+export function documentErrors(data: DatosDocumento, categories: readonly string[] = DOCUMENT_CATEGORIES): DocumentErrors {
   const errors: DocumentErrors = {};
   if (!data.nombre.trim()) errors.nombre = 'Escribe el nombre del documento.';
-  if (!DOCUMENT_CATEGORIES.some((category) => category === data.categoria)) errors.categoria = 'Selecciona una categoría.';
+  if (!categories.some((category) => category === data.categoria)) errors.categoria = 'Selecciona una categoría.';
   if (data.fechaDocumento && !validTaskDate(data.fechaDocumento)) errors.fechaDocumento = 'Ingresa una fecha válida.';
   return errors;
 }
-export function cleanDocument(data: DatosDocumento): DatosDocumento {
-  const error = Object.values(documentErrors(data))[0];
+export function cleanDocument(data: DatosDocumento, categories: readonly string[] = DOCUMENT_CATEGORIES): DatosDocumento {
+  const error = Object.values(documentErrors(data, categories))[0];
   if (error) throw new Error(error);
-  return { nombre: data.nombre.trim(), categoria: data.categoria, fechaDocumento: data.fechaDocumento || undefined, descripcion: data.descripcion?.trim() || undefined };
+  return { nombre: data.nombre.trim(), categoria: data.categoria, fechaDocumento: data.fechaDocumento || undefined, descripcion: data.descripcion?.trim() || undefined, taskId: data.taskId || undefined };
 }
 export async function validateDocumentFile(file: File): Promise<string> {
   if (file.size > MAX_DOCUMENT_BYTES) throw new Error('El archivo supera el tamaño máximo permitido de 20 MB.');

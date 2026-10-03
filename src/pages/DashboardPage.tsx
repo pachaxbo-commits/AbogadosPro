@@ -1,7 +1,12 @@
 import { eventState } from '../services/eventResults';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
+import { useProfile } from '../context/ProfileContext';
+import { useTaskClock } from '../hooks/useTaskClock';
+import { caseFollowUp } from '../services/caseFollowUp';
+import { formatFecha } from '../services/formatters';
+import { FollowUpRegistrationModal } from '../components/cases/CaseFollowUp';
 import { StatCard } from '../components/common/StatCard';
 import { EventCard } from '../components/events/EventCard';
 import { financialDate } from '../services/finance';
@@ -25,8 +30,14 @@ import {
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { assignees } = useProfile();
+  const now = useTaskClock();
   const {
     cases,
+    clients,
+    documents,
+    tasks,
+    events,
     eventsWithCase,
     activities,
     payments,
@@ -36,6 +47,12 @@ export const DashboardPage: React.FC = () => {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [selectedFollowUpId, setSelectedFollowUpId] = useState<string | null>(null);
+  const overdueCases = useMemo(() => cases.map(caso => ({ caso, review: caseFollowUp(caso, activities, documents, tasks, events, now) }))
+    .filter(item => item.review.state === 'requiere')
+    .sort((a, b) => b.review.overdueDays - a.review.overdueDays), [cases, activities, documents, tasks, events, now]);
+  const clientNames = useMemo(() => new Map(clients.map(client => [client.id, client.nombre])), [clients]);
+  const assigneeNames = useMemo(() => new Map(assignees.map(assignee => [assignee.id, assignee.nombre])), [assignees]);
 
   // Métricas
   const activeCasesCount = cases.filter(
@@ -92,14 +109,15 @@ export const DashboardPage: React.FC = () => {
     .slice(0, 5);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {/* Encabezado y Accesos Rápidos */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 rounded-2xl border border-brand-800 bg-brand-900 px-5 py-6 text-white shadow-sm sm:px-7">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <span className="mb-3 block h-0.5 w-9 bg-amber-400" aria-hidden="true" />
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Panel de Control Jurídico
           </h1>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="mt-2 text-sm text-slate-200">
             Tu agenda y la actividad reciente del despacho
           </p>
         </div>
@@ -108,7 +126,7 @@ export const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsClientModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 min-h-11 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-xs"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/70 bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 transition-colors hover:bg-brand-50"
           >
             <UserPlus className="w-4 h-4" />
             <span>Nuevo cliente</span>
@@ -116,7 +134,7 @@ export const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsCaseModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 min-h-11 py-2.5 text-sm font-semibold text-white bg-brand-900 border border-brand-900 rounded-md hover:bg-brand-800 transition-colors shadow-xs"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-amber-400 bg-amber-400 px-4 py-2.5 text-sm font-bold text-brand-950 transition-colors hover:bg-amber-300"
           >
             <FilePlus className="w-4 h-4" />
             <span>Nuevo caso</span>
@@ -124,7 +142,7 @@ export const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsEventModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 min-h-11 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-md transition-colors shadow-xs"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/70 bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 transition-colors hover:bg-brand-50"
           >
             <Plus className="w-4 h-4" />
             <span>Agendar evento</span>
@@ -133,10 +151,13 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Tarjetas Principales de Métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div>
+        <div className="mb-3 flex items-center gap-3"><span className="h-4 w-0.5 rounded-full bg-amber-400" aria-hidden="true" /><h2 className="text-sm font-semibold text-brand-900">Resumen del estudio</h2></div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Casos activos"
           compact
+          className="rounded-xl border-t-2 border-t-amber-300 shadow-sm"
           to="/casos?estado=activos"
           value={activeCasesCount}
           icon={<Briefcase className="w-5 h-5 text-brand-900" />}
@@ -144,6 +165,7 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Audiencias"
           compact
+          className="rounded-xl border-t-2 border-t-amber-300 shadow-sm"
           to="/agenda?filtro=audiencias"
           value={upcomingAudiencias}
           icon={<Scale className="w-5 h-5 text-brand-900" />}
@@ -151,6 +173,7 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Plazos"
           compact
+          className="rounded-xl border-t-2 border-t-amber-300 shadow-sm"
           to="/agenda?filtro=plazos"
           value={upcomingPlazos}
           icon={<Clock className="w-5 h-5 text-brand-900" />}
@@ -158,20 +181,40 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Por cobrar"
           compact
+          className="rounded-xl border-t-2 border-t-amber-300 shadow-sm"
           to="/finanzas#saldos-pendientes"
           value={formatBs(financialTotals.totalPendienteClientes)}
           icon={<Wallet className="w-5 h-5 text-brand-900" />}
         />
+        </div>
       </div>
 
+      <section aria-labelledby="overdue-cases-title">
+        <div className="mb-3 flex items-center gap-3"><span className="h-4 w-0.5 rounded-full bg-amber-400" aria-hidden="true" /><h2 id="overdue-cases-title" className="text-sm font-semibold text-brand-900">Casos que requieren atención</h2></div>
+        <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white shadow-xs">
+          {overdueCases.length === 0 ? <p className="px-5 py-4 text-sm text-slate-600">No hay casos pendientes de seguimiento.</p> : overdueCases.map(({ caso, review }) => <div key={caso.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">{caso.nombre}</p>
+              <p className="mt-0.5 text-xs text-slate-600">{clientNames.get(caso.clienteId) || 'Cliente no disponible'} · Encargado: {caso.encargadoId ? assigneeNames.get(caso.encargadoId) || 'No disponible' : 'Sin encargado'}</p>
+              <p className="mt-1 text-xs text-slate-500">Último movimiento: {review.lastMovement ? `${formatFecha(review.lastMovement.fecha)} · ${review.lastMovement.descripcion}` : `Sin movimientos · desde ${formatFecha(caso.fechaCreacion)}`}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{review.overdueDays} {review.overdueDays === 1 ? 'día' : 'días'} de retraso</span>
+              <Link to={`/casos/${caso.id}`} className="rounded-md px-2 py-2 text-xs font-semibold text-brand-900 hover:bg-brand-50">Ver caso →</Link>
+              <button type="button" onClick={() => setSelectedFollowUpId(caso.id)} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-900 hover:bg-brand-50">Registrar seguimiento</button>
+            </div>
+          </div>)}
+        </div>
+      </section>
+
       {/* Grid: Próximos Eventos vs Actividades Recientes */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-7 lg:grid-cols-3">
         {/* Columna Izquierda / Central: Próximos Eventos y Alertas Visuales (2 cols) */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="space-y-4 lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-brand-900" />
-              <h2 className="text-xl font-bold text-slate-900">Próximos eventos</h2>
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-900 text-amber-300"><Calendar className="h-5 w-5" /></span>
+              <h2 className="font-serif text-xl font-bold text-brand-900">Próximos eventos</h2>
             </div>
             <Link
               to="/agenda"
@@ -196,16 +239,16 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Columna Derecha: Movimientos y Actividades Recientes (1 col) */}
-        <div className="space-y-4">
+        <div className="space-y-5">
           <TaskSummary />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <History className="w-5 h-5 text-brand-900" />
-              <h2 className="text-lg font-semibold text-slate-900">Actividad reciente</h2>
+              <History className="h-5 w-5 text-brand-900" />
+              <h2 className="font-serif text-lg font-bold text-brand-900">Actividad reciente</h2>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100 shadow-xs">
+          <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white shadow-xs">
             {recientes.map((item) => (
               <div key={item.id} className="p-5 hover:bg-slate-50/80 transition-colors">
                 <p className="text-sm font-semibold text-slate-800">{item.subtipo}</p>
@@ -239,6 +282,7 @@ export const DashboardPage: React.FC = () => {
         isOpen={isEventModalOpen}
         onClose={() => setIsEventModalOpen(false)}
       />
+      {selectedFollowUpId && <FollowUpRegistrationModal casoId={selectedFollowUpId} onClose={() => setSelectedFollowUpId(null)} />}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
+import { useProfile } from '../context/ProfileContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { ActivityTimeline } from '../components/activities/ActivityTimeline';
 import { ActivityFormModal } from '../components/activities/ActivityFormModal';
@@ -14,6 +15,7 @@ import { FinancialRowActions } from '../components/finances/FinancialRowActions'
 import { Modal } from '../components/common/Modal';
 import { Pago, Gasto, Reembolso, Evento } from '../types';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
+import { CaseFollowUp } from '../components/cases/CaseFollowUp';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { TaskSummary } from '../components/tasks/TaskSummary';
 import { CaseDocuments } from '../components/documents/CaseDocuments';
@@ -37,6 +39,8 @@ import {
 type TabType = 'resumen' | 'actividad' | 'agenda' | 'documentos' | 'finanzas';
 
 export const CaseDetailPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { assignees } = useProfile();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -49,6 +53,7 @@ export const CaseDetailPage: React.FC = () => {
     deletePayment,
     deleteExpense,
     deleteReimbursement,
+    deleteCase,
     eventsWithCase,
     documents,
     documentsError,
@@ -96,10 +101,43 @@ export const CaseDetailPage: React.FC = () => {
   const [financeSuccess, setFinanceSuccess] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const [isCaseDeleteOpen, setIsCaseDeleteOpen] = useState(false);
+  const [caseDeleteError, setCaseDeleteError] = useState('');
+  const [caseDeleting, setCaseDeleting] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [taskSuccess, setTaskSuccess] = useState('');
 
   const caso = id ? getCaseWithDetails(id) : undefined;
+
+  useEffect(() => {
+    if (!isActionsOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!actionsRef.current?.contains(event.target as Node)) setIsActionsOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsActionsOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isActionsOpen]);
+
+  const confirmCaseDelete = async () => {
+    if (!id || caseDeleting) return;
+    setCaseDeleting(true);
+    setCaseDeleteError('');
+    try {
+      await deleteCase(id);
+      navigate('/casos', { replace: true, state: { caseDeleted: true } });
+    } catch (error) {
+      setCaseDeleteError(error instanceof Error ? error.message : 'No se pudo eliminar el caso.');
+      setCaseDeleting(false);
+    }
+  };
 
   if (!caso) {
     return (
@@ -240,7 +278,7 @@ export const CaseDetailPage: React.FC = () => {
               >
                 Editar caso
               </button>
-              <div className="relative">
+              <div ref={actionsRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setIsActionsOpen((open) => !open)}
@@ -267,6 +305,10 @@ export const CaseDetailPage: React.FC = () => {
                         {label}
                       </button>
                     ))}
+                    <div className="my-1 border-t border-slate-200" />
+                    <button type="button" onClick={() => { setIsActionsOpen(false); setCaseDeleteError(''); setIsCaseDeleteOpen(true); }} className="block w-full px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50 focus-visible:bg-rose-50">
+                      Eliminar caso
+                    </button>
                   </div>
                 )}
               </div>
@@ -366,6 +408,7 @@ export const CaseDetailPage: React.FC = () => {
           {/* Ficha principal del expediente */}
           <div className="lg:col-span-2 space-y-6">
             {taskSuccess && <p role="status" className="text-sm text-brand-900">{taskSuccess}</p>}
+            <CaseFollowUp caso={caso} />
             <TaskSummary casoId={caso.id} onNewTask={() => { setTaskSuccess(''); setIsTaskModalOpen(true); }} />
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
               <div><h2 className="text-sm font-semibold text-slate-900">Documentos</h2><p className="mt-1 text-xs text-slate-500">{documentsError ? 'No se pudo cargar el recuento' : `${documentCount} ${documentCount === 1 ? 'archivo' : 'archivos'}`}</p></div>
@@ -397,6 +440,11 @@ export const CaseDetailPage: React.FC = () => {
                   <span className="font-semibold text-sm text-slate-900">
                     {caso.participacion}
                   </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">Encargado del caso</span>
+                  <span className="font-semibold text-sm text-slate-900">{caso.encargadoId ? assignees.find((item) => item.id === caso.encargadoId)?.nombre || 'No disponible' : 'Sin encargado'}</span>
                 </div>
 
                 <div>
@@ -640,6 +688,7 @@ export const CaseDetailPage: React.FC = () => {
                   </div>
 
                   <h3 className="text-sm font-semibold text-slate-900">{ev.titulo}</h3>
+                  {ev.encargadoId && <p className="mt-1 text-xs text-slate-600">Encargado: {assignees.find((item) => item.id === ev.encargadoId)?.nombre || 'No disponible'}</p>}
                   <EventResultAction event={ev} />
 
                   {ev.juzgado && (
@@ -893,6 +942,17 @@ export const CaseDetailPage: React.FC = () => {
       )}
 
       {/* Modales de Gestión de este caso */}
+      {isCaseDeleteOpen && <Modal isOpen title="Eliminar caso" maxWidth="sm" onClose={() => { if (!caseDeleting) setIsCaseDeleteOpen(false); }}>
+        <div className="space-y-4 text-sm text-slate-700">
+          <p>¿Estás seguro de que deseas eliminar este caso? Esta acción eliminará también la información vinculada al expediente y no se puede deshacer.</p>
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-900">{caso.nombre}</p>
+          {caseDeleteError && <p role="alert" className="rounded-md bg-rose-50 p-2 text-rose-800">{caseDeleteError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" disabled={caseDeleting} onClick={() => setIsCaseDeleteOpen(false)} className="rounded-md border border-slate-300 px-4 py-2 hover:bg-slate-50">Cancelar</button>
+            <button type="button" disabled={caseDeleting} onClick={confirmCaseDelete} className="rounded-md bg-rose-700 px-4 py-2 font-semibold text-white hover:bg-rose-800 disabled:opacity-50">{caseDeleting ? 'Eliminando...' : 'Eliminar caso'}</button>
+          </div>
+        </div>
+      </Modal>}
       {isTaskModalOpen && <TaskFormModal casoId={caso.id} onClose={() => setIsTaskModalOpen(false)} onSuccess={() => setTaskSuccess('Tarea creada correctamente.')} />}
       {isEditModalOpen && (
         <CaseFormModal

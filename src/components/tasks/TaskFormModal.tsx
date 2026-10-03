@@ -2,6 +2,7 @@ import { useCallback, useId, useRef, useState } from 'react';
 import { CaseSearchSelect } from '../common/CaseSearchSelect';
 import { searchCases } from '../../services/caseSearch';
 import { Modal } from '../common/Modal';
+import { AssigneeSelect } from '../common/AssigneeSelect';
 import { useLegalData } from '../../context/LegalDataContext';
 import { validateTask } from '../../services/tasks';
 import type { DatosTarea, PrioridadTarea, Tarea } from '../../types';
@@ -16,7 +17,7 @@ export function TaskFormModal({ onClose, onSuccess, task, casoId }: {
   const findCases = useCallback(async (query: string, limit: number) => searchCases(casesWithDetails, query, limit), [casesWithDetails]);
   const id = useId();
   const [data, setData] = useState<DatosTarea>(() => ({
-    casoId: task?.casoId || casoId || '', titulo: task?.titulo || '',
+    casoId: task?.casoId || casoId || '', encargadoId: task?.encargadoId || '', titulo: task?.titulo || '',
     fechaLimite: task?.fechaLimite || '', horaLimite: task?.horaLimite || '',
     prioridad: task?.prioridad || 'Normal', descripcion: task?.descripcion || '',
   }));
@@ -45,6 +46,9 @@ export function TaskFormModal({ onClose, onSuccess, task, casoId }: {
       </div>
       <div><label className={label} htmlFor={`${id}-title`}>Título de la tarea *</label>
         <input id={`${id}-title`} required className={field} value={data.titulo} onChange={(e) => change({ titulo: e.target.value })} placeholder="Ej: Preparar memorial" />
+      </div>
+      <div><label className={label} htmlFor={`${id}-assignee`}>Encargado (opcional)</label>
+        <AssigneeSelect id={`${id}-assignee`} value={data.encargadoId || ''} onChange={(encargadoId) => change({ encargadoId })} className={field} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="min-w-0"><label className={label} htmlFor={`${id}-date`}>Fecha límite *</label>

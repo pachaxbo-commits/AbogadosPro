@@ -1,7 +1,9 @@
 import React, { useId, useRef, useState } from 'react';
 import { Calendar } from 'lucide-react';
 import { Modal } from '../common/Modal';
+import { AssigneeSelect } from '../common/AssigneeSelect';
 import { useLegalData } from '../../context/LegalDataContext';
+import { useProfile } from '../../context/ProfileContext';
 import { configuredReminders, validateReminders } from '../../services/reminders';
 import { Evento, TipoEvento, type RecordatorioEvento } from '../../types';
 import { calendarToday, googleCalendarUrl, openCalendarWindow } from '../../services/calendarService';
@@ -24,14 +26,16 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   onSuccess,
 }) => {
   const formId = useId();
-  const [recordatorios, setRecordatorios] = useState(() => configuredReminders(evento));
+  const { notificationPreferences, configuration } = useProfile();
+  const [recordatorios, setRecordatorios] = useState(() => configuredReminders(evento, notificationPreferences.defaultReminder));
   const { cases, clients, addEvent, updateEvent } = useLegalData();
   const submitting = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const availableCases = preselectedClientId ? cases.filter((c) => c.clienteId === preselectedClientId) : cases;
 
   const [casoId, setCasoId] = useState(evento?.casoId || preselectedCasoId || (availableCases[0]?.id || ''));
-  const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo || 'Audiencia');
+  const [encargadoId, setEncargadoId] = useState(evento?.encargadoId || '');
+  const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo || configuration.categories.events[0]);
   const [titulo, setTitulo] = useState(evento?.titulo || '');
   const [fecha, setFecha] = useState(evento?.fecha || calendarToday());
   const [hora, setHora] = useState(evento ? evento.hora || '' : '10:00');
@@ -46,13 +50,14 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
     if (submitting.current) return;
     if (!evento) {
       setCasoId(preselectedCasoId || availableCases[0]?.id || '');
-      setTipo('Audiencia');
+      setTipo(configuration.categories.events[0]);
       setTitulo('');
       setFecha(calendarToday());
       setHora('10:00');
       setDescripcion('');
       setJuzgado('');
-      setRecordatorios(configuredReminders());
+      setEncargadoId('');
+      setRecordatorios(configuredReminders(undefined, notificationPreferences.defaultReminder));
     }
     setError('');
     onClose();
@@ -80,6 +85,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       setError('');
       const data = {
         casoId: currentCasoId,
+        encargadoId,
         tipo,
         titulo: titulo.trim(),
         fecha,
@@ -102,7 +108,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         setTitulo('');
         setDescripcion('');
         setJuzgado('');
-        setRecordatorios(configuredReminders());
+        setEncargadoId('');
+        setRecordatorios(configuredReminders(undefined, notificationPreferences.defaultReminder));
       }
 
       onClose();
@@ -168,6 +175,11 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
           )}
         </div>
 
+        <div>
+          <label htmlFor={`${formId}-assignee`} className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Encargado (opcional)</label>
+          <AssigneeSelect id={`${formId}-assignee`} value={encargadoId} onChange={setEncargadoId} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-900 focus:outline-hidden focus:ring-1 focus:ring-brand-900" />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
@@ -178,12 +190,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
               onChange={(e) => setTipo(e.target.value as TipoEvento)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900 bg-white"
             >
-              <option value="Audiencia">Audiencia</option>
-              <option value="Plazo">Plazo</option>
-              <option value="Actuado">Actuado</option>
-              <option value="Reunión">Reunión</option>
-              <option value="Recordatorio">Recordatorio</option>
-              <option value="Otro">Otro</option>
+              {[...new Set([...configuration.categories.events, ...(evento && !configuration.categories.events.includes(evento.tipo) ? [evento.tipo] : [])])].map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </div>
 

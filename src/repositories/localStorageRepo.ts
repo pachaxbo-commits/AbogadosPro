@@ -1,5 +1,7 @@
 import { ILegalRepository } from './types';
-import { Cliente, Caso, Actividad, Evento, Pago, Gasto, Reembolso, Tarea, DatosTarea, EstadoTarea } from '../types';
+import { Cliente, Caso, Actividad, Evento, Pago, Gasto, Reembolso, Tarea, DatosTarea, EstadoTarea, DocumentoCaso } from '../types';
+import { recoverDemoTransaction, writeDemoTransaction } from './demoStorageTransaction';
+import { DOCUMENT_STORAGE_KEY } from './documentsRepository';
 import { getInitialTasks } from '../data/taskDemoData';
 import { readStoredTask, validateTask } from '../services/tasks';
 import { applyEventResult } from '../services/eventResults';
@@ -70,6 +72,7 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   private tasksReadError: Error | null = null;
 
   constructor() {
+    recoverDemoTransaction();
     this.clients = getStorage<Cliente[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
     this.cases = getStorage<Caso[]>(STORAGE_KEYS.CASES, INITIAL_CASES);
     this.activities = getStorage<Actividad[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
@@ -124,14 +127,14 @@ export class LocalStorageLegalRepository implements ILegalRepository {
     return { ...updated };
   }
 
-  async setTaskStatus(id: string, estado: EstadoTarea): Promise<Tarea> {
+  async setTaskStatus(id: string, estado: EstadoTarea, resultadoFinalizacion?: string): Promise<Tarea> {
     this.ensureTasksLoaded();
     const existing = this.tasks.find((task) => task.id === id);
     if (!existing) throw new Error('La tarea ya no existe.');
     if (!['Pendiente', 'Completada'].includes(estado)) throw new Error('Estado de tarea inválido.');
     if (existing.estado === estado) return { ...existing };
     const stamp = new Date().toISOString();
-    const updated = { ...existing, estado, updatedAt: stamp, completedAt: estado === 'Completada' ? stamp : undefined };
+    const updated = { ...existing, estado, updatedAt: stamp, completedAt: estado === 'Completada' ? stamp : undefined, resultadoFinalizacion: estado === 'Completada' ? resultadoFinalizacion?.trim() || undefined : existing.resultadoFinalizacion };
     this.saveTasks(this.tasks.map((task) => task.id === id ? updated : task));
     return { ...updated };
   }
@@ -154,7 +157,7 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   async addClient(clienteData: Omit<Cliente, 'id' | 'fechaRegistro'>): Promise<Cliente> {
     const newClient: Cliente = {
       ...clienteData,
-      id: `cli-${Date.now()}`,
+      id: `cli-${crypto.randomUUID()}`,
       fechaRegistro: new Date().toISOString().split('T')[0],
     };
     this.clients = [newClient, ...this.clients];
@@ -187,7 +190,7 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   async addCase(casoData: Omit<Caso, 'id' | 'fechaCreacion'>): Promise<Caso> {
     const newCase: Caso = {
       ...casoData,
-      id: `cas-${Date.now()}`,
+      id: `cas-${crypto.randomUUID()}`,
       fechaCreacion: new Date().toISOString().split('T')[0],
     };
     this.cases = [newCase, ...this.cases];
@@ -397,7 +400,25 @@ export class LocalStorageLegalRepository implements ILegalRepository {
    */
   async resetToInitial(): Promise<void> {
     const fresh = getInitialMockData();
-    this.saveTasks(getInitialTasks(fresh.cases.map((caso) => caso.id)));
+    const freshTasks = getInitialTasks(fresh.cases.map((caso) => caso.id));
+    writeDemoTransaction({
+      [STORAGE_KEYS.CLIENTS]: JSON.stringify(fresh.clients),
+      [STORAGE_KEYS.CASES]: JSON.stringify(fresh.cases),
+      [STORAGE_KEYS.ACTIVITIES]: JSON.stringify(fresh.activities),
+      [STORAGE_KEYS.EVENTS]: JSON.stringify(fresh.events),
+      [STORAGE_KEYS.PAYMENTS]: JSON.stringify(fresh.payments),
+      [STORAGE_KEYS.EXPENSES]: JSON.stringify(fresh.expenses),
+      [STORAGE_KEYS.REIMBURSEMENTS]: '[]',
+      [STORAGE_KEYS.TASKS]: JSON.stringify(freshTasks),
+      [DOCUMENT_STORAGE_KEY]: '[]',
+      'abogadospro_configuration_v1:demo': null,
+      'abogadospro_assignees_v1:demo': null,
+      'abogadospro_studio_expenses_v1:demo': null,
+      'abogadospro_appearance_v1:demo-lawyer': null,
+      'abogadospro_notification_preferences_v1:demo-lawyer': null,
+      'abogadospro_profile_v1:demo-lawyer': null,
+    });
+    this.tasks = freshTasks;
     this.tasksReadError = null;
     this.clients = fresh.clients;
     this.cases = fresh.cases;
@@ -407,12 +428,37 @@ export class LocalStorageLegalRepository implements ILegalRepository {
     this.expenses = fresh.expenses;
     this.reimbursements = [];
 
-    setStorage(STORAGE_KEYS.CLIENTS, this.clients);
-    setStorage(STORAGE_KEYS.CASES, this.cases);
-    setStorage(STORAGE_KEYS.ACTIVITIES, this.activities);
-    setStorage(STORAGE_KEYS.EVENTS, this.events);
-    setStorage(STORAGE_KEYS.PAYMENTS, this.payments);
-    setStorage(STORAGE_KEYS.EXPENSES, this.expenses);
-    setStorage(STORAGE_KEYS.REIMBURSEMENTS, this.reimbursements);
+  }
+
+  async deleteCaseCascade(casoId: string, documents: DocumentoCaso[]): Promise<DocumentoCaso[]> {
+    this.ensureTasksLoaded();
+    if (!this.cases.some(caso => caso.id === casoId)) throw new Error('El caso ya no existe.');
+    const kept = <T extends { casoId: string }>(items: T[]) => items.filter(item => item.casoId !== casoId);
+    const removedDocuments = documents.filter(doc => doc.casoId === casoId);
+    const nextCases = this.cases.filter(caso => caso.id !== casoId);
+    const nextActivities = kept(this.activities);
+    const nextEvents = kept(this.events);
+    const nextPayments = kept(this.payments);
+    const nextExpenses = kept(this.expenses);
+    const nextReimbursements = kept(this.reimbursements);
+    const nextTasks = kept(this.tasks);
+    writeDemoTransaction({
+      [STORAGE_KEYS.CASES]: JSON.stringify(nextCases),
+      [STORAGE_KEYS.ACTIVITIES]: JSON.stringify(nextActivities),
+      [STORAGE_KEYS.EVENTS]: JSON.stringify(nextEvents),
+      [STORAGE_KEYS.PAYMENTS]: JSON.stringify(nextPayments),
+      [STORAGE_KEYS.EXPENSES]: JSON.stringify(nextExpenses),
+      [STORAGE_KEYS.REIMBURSEMENTS]: JSON.stringify(nextReimbursements),
+      [STORAGE_KEYS.TASKS]: JSON.stringify(nextTasks),
+      [DOCUMENT_STORAGE_KEY]: JSON.stringify(documents.filter(doc => doc.casoId !== casoId)),
+    });
+    this.cases = nextCases;
+    this.activities = nextActivities;
+    this.events = nextEvents;
+    this.payments = nextPayments;
+    this.expenses = nextExpenses;
+    this.reimbursements = nextReimbursements;
+    this.tasks = nextTasks;
+    return removedDocuments;
   }
 }

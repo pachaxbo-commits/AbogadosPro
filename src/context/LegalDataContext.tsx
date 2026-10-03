@@ -22,6 +22,8 @@ import {
 import { eventState, eventHasPassed } from '../services/eventResults';
 import { LocalDocumentRepository, DOCUMENT_STORAGE_KEY } from '../repositories/documentsRepository';
 import { TemporaryDocumentFiles } from '../services/documentFiles';
+import { configurationRepository } from '../repositories/configurationRepository';
+import { LocalStorageLegalRepository } from '../repositories/localStorageRepo';
 import { ILegalRepository, demoLegalRepository, FirestoreLegalRepository } from '../repositories';
 import { calcularAlertaVisual } from '../services/formatters';
 import { useAuth } from './AuthContext';
@@ -31,6 +33,7 @@ interface LegalDataContextType {
   documents: DocumentoCaso[];
   documentsError: string;
   addDocument: (casoId: string, data: DatosDocumento, file: File) => Promise<DocumentoCaso>;
+  addDocuments: (casoId: string, items: { data: DatosDocumento; file: File }[]) => Promise<DocumentoCaso[]>;
   updateDocument: (casoId: string, id: string, data: DatosDocumento) => Promise<DocumentoCaso>;
   deleteDocument: (casoId: string, id: string) => Promise<void>;
   getDocumentUrl: (casoId: string, id: string) => Promise<string | null>;
@@ -39,6 +42,7 @@ interface LegalDataContextType {
   addTask: (data: DatosTarea) => Promise<Tarea>;
   updateTask: (id: string, data: DatosTarea) => Promise<Tarea>;
   setTaskStatus: (id: string, estado: EstadoTarea) => Promise<Tarea>;
+  completeTask: (id: string, resultado: string, files: { file: File; nombre: string; categoria: string }[]) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   clients: Cliente[];
   cases: Caso[];
@@ -54,6 +58,7 @@ interface LegalDataContextType {
   updateClient: (id: string, data: Omit<Cliente, 'id' | 'fechaRegistro'>) => Promise<Cliente>;
   addCase: (data: Omit<Caso, 'id' | 'fechaCreacion'>) => Promise<Caso>;
   updateCase: (id: string, data: Omit<Caso, 'id' | 'fechaCreacion'>) => Promise<Caso>;
+  deleteCase: (id: string) => Promise<void>;
   addActivity: (data: Omit<Actividad, 'id'>) => Promise<Actividad>;
   addEvent: (data: Omit<Evento, 'id'>) => Promise<Evento>;
   updateEvent: (id: string, data: Omit<Evento, 'id'>) => Promise<Evento>;
@@ -123,6 +128,7 @@ const LegalDataSession: React.FC<{ children: React.ReactNode }> = ({ children })
   const documentRepository = useMemo(() => new LocalDocumentRepository(
     new TemporaryDocumentFiles(), async (id) => Boolean(await activeRepository.getCaseById(id)),
     currentUser ? DOCUMENT_STORAGE_KEY + ':' + encodeURIComponent(workspaceId || currentUser.uid) : DOCUMENT_STORAGE_KEY,
+    () => configurationRepository.get(currentUser ? workspaceId || currentUser.uid : 'demo').categories.documents,
   ), [activeRepository, currentUser, workspaceId]);
 
   const loadAll = useCallback(async () => {
@@ -195,6 +201,11 @@ documentRepository.getDocuments().catch((err) => {
     setDocuments((prev) => [created, ...prev]);
     return created;
   };
+  const addDocuments = async (casoId: string, items: { data: DatosDocumento; file: File }[]) => {
+    const created = await documentRepository.addDocuments(casoId, items);
+    setDocuments((prev) => [...created, ...prev]);
+    return created;
+  };
   const updateDocument = async (casoId: string, id: string, data: DatosDocumento) => {
     const updated = await documentRepository.updateDocument(casoId, id, data);
     setDocuments((prev) => prev.map((doc) => doc.id === id && doc.casoId === casoId ? updated : doc));
@@ -218,6 +229,19 @@ documentRepository.getDocuments().catch((err) => {
     const updated = await activeRepository.setTaskStatus(id, estado);
     setTasks((prev) => prev.map((task) => task.id === id ? updated : task));
     return updated;
+  };
+  const completeTask = async (id: string, resultado: string, files: { file: File; nombre: string; categoria: string }[]): Promise<void> => {
+    const task = tasks.find((item) => item.id === id);
+    if (!task || task.estado !== 'Pendiente') throw new Error('La tarea ya no está pendiente.');
+    const created = files.length ? await documentRepository.addDocuments(task.casoId, files.map(({ file, nombre, categoria }) => ({ file, data: { nombre, categoria, taskId: id } }))) : [];
+    try {
+      const updated = await activeRepository.setTaskStatus(id, 'Completada', resultado);
+      setDocuments((prev) => [...created, ...prev]);
+      setTasks((prev) => prev.map((item) => item.id === id ? updated : item));
+    } catch (error) {
+      if (created.length) await documentRepository.removeDocuments(task.casoId, created.map((item) => item.id));
+      throw error;
+    }
   };
   const deleteTask = async (id: string): Promise<void> => {
     await activeRepository.deleteTask(id);
@@ -335,6 +359,18 @@ documentRepository.getDocuments().catch((err) => {
       return;
     }
     await demoLegalRepository.resetToInitial();
+    await documentRepository.clearTemporaryFiles();
+    await loadAll();
+    window.dispatchEvent(new Event('abogadospro:demo-reset'));
+  };
+
+  const deleteCase = async (id: string): Promise<void> => {
+    if (!isDemo || !(activeRepository instanceof LocalStorageLegalRepository)) {
+      throw new Error('La eliminación de casos solo está disponible en el entorno local de demostración.');
+    }
+    const allDocuments = await documentRepository.getDocuments();
+    const removed = await activeRepository.deleteCaseCascade(id, allDocuments);
+    await documentRepository.releaseFiles(removed);
     await loadAll();
   };
 
@@ -464,7 +500,7 @@ documentRepository.getDocuments().catch((err) => {
   return (
     <LegalDataContext.Provider
       value={{
-        documents, documentsError, addDocument, updateDocument, deleteDocument,
+        documents, documentsError, addDocument, addDocuments, updateDocument, deleteDocument,
         getDocumentUrl,
         saveEventResult,
         tasks,
@@ -472,6 +508,7 @@ documentRepository.getDocuments().catch((err) => {
         addTask,
         updateTask,
         setTaskStatus,
+        completeTask,
         deleteTask,
         clients,
         cases,
@@ -498,6 +535,7 @@ documentRepository.getDocuments().catch((err) => {
         updateReimbursement,
         deleteReimbursement,
         resetDemoData,
+        deleteCase,
         getCaseWithDetails,
         clientsWithSummary,
         casesWithDetails,

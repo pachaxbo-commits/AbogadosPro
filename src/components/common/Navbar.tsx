@@ -36,6 +36,7 @@ export const Navbar: React.FC = () => {
 
       try {
         await resetDemoData();
+        navigate('/');
       } catch (err) {
         window.alert(
           err instanceof Error
@@ -50,7 +51,7 @@ export const Navbar: React.FC = () => {
 
   const handleExitDemo = () => {
     exitDemoMode();
-    navigate('/login');
+    navigate('/', { replace: true });
   };
 
   const handleLogout = async () => {
@@ -74,7 +75,8 @@ export const Navbar: React.FC = () => {
           <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <Sparkles className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate sm:whitespace-normal">
+              <span className="sm:hidden">Modo demo · datos ficticios</span>
+              <span className="hidden sm:inline">
                 <strong>Modo Demostración Activo:</strong>{' '}
                 Datos ficticios en memoria local. Ninguna acción afecta la base
                 de datos real.
@@ -243,7 +245,7 @@ export const Navbar: React.FC = () => {
               )}
             </div>
 
-            <button
+            {(currentUser || isDemo) && <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="xl:hidden p-2 rounded-md text-slate-300 hover:text-white hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -256,7 +258,7 @@ export const Navbar: React.FC = () => {
               ) : (
                 <Menu className="w-6 h-6" />
               )}
-            </button>
+            </button>}
           </div>
         </div>
       </div>

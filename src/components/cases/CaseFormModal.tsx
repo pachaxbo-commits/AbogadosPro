@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
+import { useProfile } from '../../context/ProfileContext';
+import { AssigneeSelect } from '../common/AssigneeSelect';
 import { AreaCaso, Caso, EstadoCaso, ParticipacionCaso, TipoIdentificacionJudicial } from '../../types';
 
 interface CaseFormModalProps {
@@ -19,10 +21,14 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
   onSuccess,
 }) => {
   const { clients, addCase, updateCase } = useLegalData();
+  const { configuration } = useProfile();
 
   const [nombre, setNombre] = useState(caso?.nombre || '');
   const [clienteId, setClienteId] = useState(caso?.clienteId || preselectedClientId || (clients[0]?.id || ''));
-  const [area, setArea] = useState<AreaCaso>(caso?.area || 'Civil');
+  const [encargadoId, setEncargadoId] = useState(caso?.encargadoId || '');
+  const [seguimiento, setSeguimiento] = useState(() => caso?.seguimientoDias === null ? 'none' : [7, 15, 30, 60].includes(caso?.seguimientoDias ?? 30) ? String(caso?.seguimientoDias ?? 30) : 'custom');
+  const [customDays, setCustomDays] = useState(() => caso?.seguimientoDias && ![7, 15, 30, 60].includes(caso.seguimientoDias) ? String(caso.seguimientoDias) : '');
+  const [area, setArea] = useState<AreaCaso>(caso?.area || configuration.categories.areas[0]);
   const [estado, setEstado] = useState<EstadoCaso>(caso?.estado || 'Activo');
   const [participacion, setParticipacion] = useState<ParticipacionCaso>(caso?.participacion || 'Demandante');
   const [tipoIdentificacionJudicial, setTipoIdentificacionJudicial] = useState<TipoIdentificacionJudicial>(caso?.tipoIdentificacionJudicial || 'NUREJ');
@@ -57,6 +63,11 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
       setError('Los honorarios acordados no pueden ser un valor negativo');
       return;
     }
+    const seguimientoDias = seguimiento === 'none' ? null : seguimiento === 'custom' ? Number(customDays) : Number(seguimiento);
+    if (seguimientoDias !== null && (!Number.isInteger(seguimientoDias) || seguimientoDias < 1 || seguimientoDias > 3650)) {
+      setError('Indica un seguimiento de 1 a 3650 días.');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -64,6 +75,8 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
       const data = {
         nombre: nombre.trim(),
         clienteId: currentClientId,
+        encargadoId,
+        seguimientoDias,
         area,
         estado,
         participacion,
@@ -82,6 +95,9 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
         setHonorariosAcordados('');
         setJuzgadoTribunal('');
         setDescripcion('');
+        setEncargadoId('');
+        setSeguimiento('30');
+        setCustomDays('');
       }
 
       onClose();
@@ -114,7 +130,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
         )}
 
         <section className={caso ? 'space-y-4' : 'space-y-3'}>
-          {!caso && <h4 className="text-xs font-bold text-brand-900 border-b border-slate-100 pb-1.5">Datos del caso</h4>}
+          {!caso && <h4 className="border-b border-slate-100 border-l-2 border-l-amber-400 pb-1.5 pl-2 text-xs font-bold text-brand-900">Datos del caso</h4>}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
             Carátula / Nombre del Caso <span className="text-rose-500">*</span>
@@ -156,10 +172,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
               onChange={(e) => setArea(e.target.value as AreaCaso)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-brand-900 focus:border-brand-900 bg-white"
             >
-              <option value="Civil">Civil</option>
-              <option value="Penal">Penal</option>
-              <option value="Familiar">Familiar</option>
-              <option value="Laboral">Laboral</option>
+              {[...new Set([...configuration.categories.areas, ...(caso && !configuration.categories.areas.includes(caso.area) ? [caso.area] : [])])].map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </div>
         </div>
@@ -200,11 +213,24 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
             </select>
           </div>
         </div>
+        <div>
+          <label htmlFor="case-assignee" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Encargado del caso (opcional)</label>
+          <AssigneeSelect id="case-assignee" value={encargadoId} onChange={setEncargadoId} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-900 focus:outline-hidden focus:ring-1 focus:ring-brand-900" />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="case-follow-up" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Seguimiento</label>
+            <select id="case-follow-up" value={seguimiento} onChange={(event) => setSeguimiento(event.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-900 focus:outline-hidden focus:ring-1 focus:ring-brand-900">
+              <option value="7">7 días</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option><option value="custom">Personalizado</option><option value="none">Sin seguimiento</option>
+            </select>
+          </div>
+          {seguimiento === 'custom' && <div><label htmlFor="case-custom-follow-up" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Días entre revisiones</label><input id="case-custom-follow-up" type="number" min="1" max="3650" step="1" required value={customDays} onChange={(event) => setCustomDays(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-900 focus:outline-hidden focus:ring-1 focus:ring-brand-900" /></div>}
+        </div>
         </section>
 
         {/* NUREJ / CUD */}
         <section className={caso ? '' : 'space-y-2'}>
-          {!caso && <h4 className="text-xs font-bold text-brand-900 border-b border-slate-100 pb-1.5">Identificación judicial</h4>}
+          {!caso && <h4 className="border-b border-slate-100 border-l-2 border-l-amber-400 pb-1.5 pl-2 text-xs font-bold text-brand-900">Identificación judicial</h4>}
         <div className={caso ? 'grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200' : 'grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200'}>
           <div>
             {caso && <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
@@ -251,7 +277,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
         </section>
 
         <section className={caso ? 'space-y-4' : 'space-y-3'}>
-          {!caso && <h4 className="text-xs font-bold text-brand-900 border-b border-slate-100 pb-1.5">Información adicional</h4>}
+          {!caso && <h4 className="border-b border-slate-100 border-l-2 border-l-amber-400 pb-1.5 pl-2 text-xs font-bold text-brand-900">Información adicional</h4>}
         <div className={`grid grid-cols-1 sm:grid-cols-2 ${caso ? 'gap-4' : 'gap-3'}`}>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
@@ -301,18 +327,18 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
         </div>
         </section>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
+            className="min-h-10 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-900 transition-colors hover:bg-brand-50"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
+            className="min-h-10 rounded-md bg-brand-900 px-4 py-2 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-brand-800 disabled:opacity-50"
           >
             {isSubmitting ? 'Guardando...' : caso ? 'Guardar cambios' : 'Crear Caso'}
           </button>

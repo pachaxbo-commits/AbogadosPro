@@ -12,6 +12,7 @@ interface StatCardProps {
   to?: string;
   onClick?: () => void;
   selected?: boolean;
+  className?: string;
 }
 
 export const StatCard: React.FC<StatCardProps> = ({
@@ -25,6 +26,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   to,
   onClick,
   selected = false,
+  className: extraClassName = '',
 }) => {
   const badgeClasses = {
     default: 'bg-slate-100 text-slate-700',
@@ -34,7 +36,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   }[badgeType];
 
   const interactive = Boolean(to || onClick);
-  const className = `block bg-white rounded-lg border shadow-xs transition-colors ${compact ? 'p-4' : 'p-5'} ${selected ? 'border-brand-500 bg-brand-50/50' : 'border-slate-200 hover:border-slate-300'}${interactive ? ' w-full text-left cursor-pointer select-none hover:bg-brand-50/60 hover:border-brand-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-900' : ''}`;
+  const className = `block bg-white rounded-lg border shadow-xs transition-colors ${compact ? 'p-4' : 'p-5'} ${selected ? 'border-brand-500 bg-brand-50/50' : 'border-slate-200 hover:border-slate-300'}${interactive ? ' w-full text-left cursor-pointer select-none hover:bg-brand-50/60 hover:border-brand-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-900' : ''} ${extraClassName}`;
   const content = (
     <>
       <div className="flex items-center justify-between">

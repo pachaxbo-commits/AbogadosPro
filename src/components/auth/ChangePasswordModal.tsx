@@ -40,9 +40,9 @@ export const ChangePasswordModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="bg-brand-900 px-6 py-5 text-white flex items-center gap-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-2 sm:p-4">
+      <div className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-brand-900 px-4 py-5 text-white flex items-center gap-3 sm:px-6">
           <div className="w-10 h-10 rounded-lg bg-brand-800 border border-brand-700 flex items-center justify-center text-amber-300">
             <KeyRound className="w-5 h-5" />
           </div>
@@ -52,7 +52,7 @@ export const ChangePasswordModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-4 sm:p-6">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-start gap-2.5">
             <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <span>

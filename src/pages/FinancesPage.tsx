@@ -2,6 +2,8 @@ import { FinancialDonut } from '../components/finances/FinancialDonut';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
+import { useAuth } from '../context/AuthContext';
+import { StudioExpenses } from '../components/finances/StudioExpenses';
 import { StatCard } from '../components/common/StatCard';
 import { financialDate, compareFinancialDate } from '../services/finance';
 import { formatBs } from '../services/formatters';
@@ -15,12 +17,16 @@ import {
 
 export const FinancesPage: React.FC = () => {
   const { casesWithDetails, payments, expenses, reimbursements, financialTotals, cases } = useLegalData();
+  const { currentUser, userProfile } = useAuth();
+  const workspaceId = currentUser ? userProfile?.workspaceId || currentUser.uid : 'demo';
   const navigate = useNavigate();
   const { hash } = useLocation();
   const [selectedMetric, setSelectedMetric] = useState<'acordado' | 'cobrado' | 'pendiente' | 'gastos' | null>(null);
+  const [section, setSection] = useState<'cases' | 'studio'>('cases');
 
   useEffect(() => {
     if (hash === '#saldos-pendientes') {
+      setSection('cases');
       document.getElementById('saldos-pendientes')?.scrollIntoView();
     }
   }, [hash]);
@@ -101,6 +107,14 @@ export const FinancesPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      <div role="tablist" aria-label="Secciones de Finanzas" className="flex gap-2 border-b border-slate-200">
+        <button type="button" role="tab" aria-selected={section === 'cases'} onClick={() => setSection('cases')} className={`border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors ${section === 'cases' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-500 hover:text-brand-900'}`}>Clientes y casos</button>
+        <button type="button" role="tab" aria-selected={section === 'studio'} onClick={() => setSection('studio')} className={`border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors ${section === 'studio' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-500 hover:text-brand-900'}`}>Estudio</button>
+      </div>
+
+      {section === 'studio' && <StudioExpenses key={workspaceId} workspaceId={workspaceId} />}
+      {section === 'cases' && <>
 
       {/* 4 Métricas Principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
@@ -271,7 +285,7 @@ export const FinancesPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between gap-2 mt-1">
-                    <div className="text-xs font-semibold text-slate-900 truncate">
+                    <div className="min-w-0 break-words text-xs font-semibold text-slate-900 sm:truncate">
                       {isIngreso ? mov.nota || mov.titulo : mov.titulo}
                     </div>
                     <div
@@ -284,7 +298,7 @@ export const FinancesPage: React.FC = () => {
                   </div>
 
                   <div className="mt-2 flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-50">
-                    <span className="text-slate-400 truncate max-w-[170px]">
+                    <span className="min-w-0 break-words text-slate-400 sm:max-w-[170px] sm:truncate">
                       {mov.casoNombre}
                     </span>
                     <span className="font-medium text-brand-900 flex items-center gap-0.5 whitespace-nowrap">
@@ -298,6 +312,7 @@ export const FinancesPage: React.FC = () => {
           </div>
         </div>}
       </div>
+      </>}
     </div>
   );
 };

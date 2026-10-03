@@ -180,18 +180,18 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
           />
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
+            className="min-h-10 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-900 transition-colors hover:bg-brand-50"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-semibold text-white bg-brand-900 rounded-md hover:bg-brand-800 disabled:opacity-50 transition-colors shadow-xs"
+            className="min-h-10 rounded-md bg-brand-900 px-4 py-2 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-brand-800 disabled:opacity-50"
           >
             {isSubmitting ? 'Guardando...' : client ? 'Guardar cambios' : 'Guardar cliente'}
           </button>
