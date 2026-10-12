@@ -24,9 +24,13 @@ import { LocalDocumentRepository, DOCUMENT_STORAGE_KEY } from '../repositories/d
 import { TemporaryDocumentFiles } from '../services/documentFiles';
 import { configurationRepository } from '../repositories/configurationRepository';
 import { LocalStorageLegalRepository } from '../repositories/localStorageRepo';
+import { createDemoScopedRepository } from '../repositories/demoScopedRepo';
 import { ILegalRepository, demoLegalRepository, FirestoreLegalRepository } from '../repositories';
 import { calcularAlertaVisual } from '../services/formatters';
 import { useAuth } from './AuthContext';
+import { useOffice } from './OfficeContext';
+import { internalDb } from '../services/internalAuth';
+import { clearSharedNotices } from '../services/demoShareNotifications';
 import { canCreateClient, canCreateCase } from '../config/plans';
 
 interface LegalDataContextType {
@@ -95,8 +99,9 @@ const LegalDataContext = createContext<LegalDataContextType | undefined>(undefin
 
 export const LegalDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, userProfile, isDemo, loading } = useAuth();
+  const { user: officeUser } = useOffice();
   if (loading) return <p className="p-6">Cargando…</p>;
-  return <LegalDataSession key={currentUser ? currentUser.uid + ':' + userProfile?.workspaceId : isDemo ? 'demo' : 'guest'}>{children}</LegalDataSession>;
+  return <LegalDataSession key={currentUser ? currentUser.uid + ':' + userProfile?.workspaceId : isDemo ? 'demo:' + (officeUser?.id || 'select') : 'guest'}>{children}</LegalDataSession>;
 };
 const LegalDataSession: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const eventNow = useTaskClock();
@@ -105,6 +110,7 @@ const LegalDataSession: React.FC<{ children: React.ReactNode }> = ({ children })
   const [tasks, setTasks] = useState<Tarea[]>([]);
   const [tasksError, setTasksError] = useState('');
   const { currentUser, userProfile, isDemo, loading: authLoading } = useAuth();
+  const { state: officeState, user: officeUser } = useOffice();
 
   const [clients, setClients] = useState<Cliente[]>([]);
   const [cases, setCases] = useState<Caso[]>([]);
@@ -120,10 +126,10 @@ const LegalDataSession: React.FC<{ children: React.ReactNode }> = ({ children })
   // Instancia activa del repositorio: Firestore por workspace si está autenticado, Demo si no.
   const activeRepository: ILegalRepository = useMemo(() => {
     if (currentUser && workspaceId) {
-      return new FirestoreLegalRepository(workspaceId);
+      return new FirestoreLegalRepository(workspaceId, officeState === 'active' ? internalDb || undefined : undefined, officeUser || undefined);
     }
-    return demoLegalRepository;
-  }, [currentUser, workspaceId]);
+    return isDemo && officeUser ? createDemoScopedRepository(officeUser) : demoLegalRepository;
+  }, [currentUser, workspaceId, officeState, officeUser, isDemo]);
 
   const documentRepository = useMemo(() => new LocalDocumentRepository(
     new TemporaryDocumentFiles(), async (id) => Boolean(await activeRepository.getCaseById(id)),
@@ -179,13 +185,13 @@ documentRepository.getDocuments().catch((err) => {
       setExpenses(ex);
       setReimbursements(re);
       setTasks(ts);
-      setDocuments(docs);
+      setDocuments(isDemo && officeUser ? docs.filter(item => cs.some(caso => caso.id === item.casoId)) : docs);
     } catch (err) {
       console.error('Error loading legal data:', err);
     } finally {
       setLoading(false);
     }
-  }, [activeRepository, documentRepository, authLoading, currentUser, isDemo, workspaceId]);
+  }, [activeRepository, documentRepository, authLoading, currentUser, isDemo, workspaceId, officeUser]);
 
   useEffect(() => {
     loadAll();
@@ -196,22 +202,31 @@ documentRepository.getDocuments().catch((err) => {
     setEvents(await activeRepository.saveEventResult(casoId, id, data));
   };
   const getDocumentUrl = useCallback((casoId: string, id: string) => documentRepository.getFileUrl(casoId, id), [documentRepository]);
+  const requireDocumentWrite = (casoId: string) => {
+    if (!isDemo || !officeUser) return;
+    const item = cases.find(caso => caso.id === casoId);
+    if (!item || (officeUser.role === 'abogado' && item.ownerUserId !== officeUser.id && item.sharePermissions?.[officeUser.id] !== 'collaborate') || (officeUser.role === 'asistente' && !item.assignedUserIds?.includes(officeUser.id))) throw new Error('No tienes permiso para modificar documentos de este caso.');
+  };
   const addDocument = async (casoId: string, data: DatosDocumento, file: File) => {
+    requireDocumentWrite(casoId);
     const created = await documentRepository.addDocument(casoId, data, file);
     setDocuments((prev) => [created, ...prev]);
     return created;
   };
   const addDocuments = async (casoId: string, items: { data: DatosDocumento; file: File }[]) => {
+    requireDocumentWrite(casoId);
     const created = await documentRepository.addDocuments(casoId, items);
     setDocuments((prev) => [...created, ...prev]);
     return created;
   };
   const updateDocument = async (casoId: string, id: string, data: DatosDocumento) => {
+    requireDocumentWrite(casoId);
     const updated = await documentRepository.updateDocument(casoId, id, data);
     setDocuments((prev) => prev.map((doc) => doc.id === id && doc.casoId === casoId ? updated : doc));
     return updated;
   };
   const deleteDocument = async (casoId: string, id: string) => {
+    requireDocumentWrite(casoId);
     await documentRepository.deleteDocument(casoId, id);
     setDocuments((prev) => prev.filter((doc) => doc.id !== id || doc.casoId !== casoId));
   };
@@ -359,6 +374,7 @@ documentRepository.getDocuments().catch((err) => {
       return;
     }
     await demoLegalRepository.resetToInitial();
+    clearSharedNotices();
     await documentRepository.clearTemporaryFiles();
     await loadAll();
     window.dispatchEvent(new Event('abogadospro:demo-reset'));

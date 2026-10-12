@@ -2,11 +2,13 @@ import React from 'react';
 import { EventMenu } from './EventMenu';
 import { Link } from 'react-router-dom';
 import { EventoConCaso } from '../../types';
-import { useProfile } from '../../context/ProfileContext';
+import { useOffice } from '../../context/OfficeContext';
+import { useLegalData } from '../../context/LegalDataContext';
 import { formatFecha, formatHora } from '../../services/formatters';
 import { AlertBadge } from '../common/AlertBadge';
 import { AreaBadge } from '../common/StatusBadge';
 import { EventResultAction, EventResultStatus } from './EventResultAction';
+import { SharedWithLabel } from '../common/SharedWithLabel';
 import {
   Calendar,
   Clock,
@@ -29,7 +31,9 @@ export const EventCard: React.FC<EventCardProps> = ({
   summary = false,
   onEdit,
 }) => {
-  const { assignees } = useProfile();
+  const { users } = useOffice();
+  const { cases } = useLegalData();
+  const caseVisible = cases.some(item => item.id === evento.casoId);
   const interactive = Boolean(onEdit);
   const getTipoStyle = (tipo: string) => {
     switch (tipo) {
@@ -52,7 +56,7 @@ export const EventCard: React.FC<EventCardProps> = ({
         evento.tipo
       )}`}
     >
-      {interactive && <Link to={`/casos/${evento.casoId}?tab=agenda&evento=${encodeURIComponent(evento.id)}`} aria-label={`Ver evento ${evento.titulo} en la agenda del caso`} className="absolute inset-0 z-10 rounded-lg" />}
+      {interactive && caseVisible && <Link to={`/casos/${evento.casoId}?tab=agenda&evento=${encodeURIComponent(evento.id)}`} aria-label={`Ver evento ${evento.titulo} en la agenda del caso`} className="absolute inset-0 z-10 rounded-lg" />}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-xs tracking-wider uppercase text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -81,7 +85,8 @@ export const EventCard: React.FC<EventCardProps> = ({
       </div>
 
       <h3 className={`font-semibold text-slate-900 break-words ${summary ? 'text-base mb-4' : 'text-sm mb-1'}`}>{evento.titulo}</h3>
-      {!summary && evento.encargadoId && <p className="mb-2 text-xs text-slate-600">Encargado: <span className="font-medium text-brand-900">{assignees.find((item) => item.id === evento.encargadoId)?.nombre || 'No disponible'}</span></p>}
+      {!summary && <SharedWithLabel kind="event" itemId={evento.id} ownerUserId={evento.ownerUserId} sharedWithUserIds={evento.sharedWithUserIds} sharePermissions={evento.sharePermissions} />}
+      {!summary && Boolean(evento.assignedUserIds?.length) && <p className="mb-2 text-xs text-slate-600">Asistentes: <span className="font-medium text-brand-900">{evento.assignedUserIds?.map(id => users.find(person => person.id === id)?.displayName || 'No disponible').join(', ')}</span></p>}
       {interactive && <EventResultAction event={evento} />}
 
       {!summary && evento.juzgado && (
@@ -109,7 +114,7 @@ export const EventCard: React.FC<EventCardProps> = ({
           </div>
         </div>
 
-        {showCaseLink && (interactive ? (
+        {showCaseLink && caseVisible && (interactive ? (
           <Link to={`/casos/${evento.casoId}`} className="relative z-20 inline-flex items-center gap-1 font-semibold text-brand-900 hover:text-brand-700 hover:underline">Ver caso →</Link>
         ) : (
           <Link

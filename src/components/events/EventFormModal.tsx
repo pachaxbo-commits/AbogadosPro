@@ -1,7 +1,9 @@
 import React, { useId, useRef, useState } from 'react';
 import { Calendar } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { AssigneeSelect } from '../common/AssigneeSelect';
+
+import { OfficePeoplePicker } from '../common/OfficePeoplePicker';
+import { useOffice } from '../../context/OfficeContext';
 import { useLegalData } from '../../context/LegalDataContext';
 import { useProfile } from '../../context/ProfileContext';
 import { configuredReminders, validateReminders } from '../../services/reminders';
@@ -27,6 +29,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
 }) => {
   const formId = useId();
   const { notificationPreferences, configuration } = useProfile();
+  const { user: officeUser } = useOffice();
   const [recordatorios, setRecordatorios] = useState(() => configuredReminders(evento, notificationPreferences.defaultReminder));
   const { cases, clients, addEvent, updateEvent } = useLegalData();
   const submitting = useRef(false);
@@ -34,7 +37,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   const availableCases = preselectedClientId ? cases.filter((c) => c.clienteId === preselectedClientId) : cases;
 
   const [casoId, setCasoId] = useState(evento?.casoId || preselectedCasoId || (availableCases[0]?.id || ''));
-  const [encargadoId, setEncargadoId] = useState(evento?.encargadoId || '');
+  const [assistantIds, setAssistantIds] = useState(evento?.assignedUserIds || []);
+  const [sharedIds, setSharedIds] = useState(evento?.sharedWithUserIds || []);
   const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo || configuration.categories.events[0]);
   const [titulo, setTitulo] = useState(evento?.titulo || '');
   const [fecha, setFecha] = useState(evento?.fecha || calendarToday());
@@ -56,7 +60,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       setHora('10:00');
       setDescripcion('');
       setJuzgado('');
-      setEncargadoId('');
+      setAssistantIds([]);
+      setSharedIds([]);
       setRecordatorios(configuredReminders(undefined, notificationPreferences.defaultReminder));
     }
     setError('');
@@ -85,7 +90,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       setError('');
       const data = {
         casoId: currentCasoId,
-        encargadoId,
+        ...(officeUser ? { assignedUserIds: assistantIds, sharedWithUserIds: sharedIds } : {}),
         tipo,
         titulo: titulo.trim(),
         fecha,
@@ -108,7 +113,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         setTitulo('');
         setDescripcion('');
         setJuzgado('');
-        setEncargadoId('');
+        setAssistantIds([]);
+        setSharedIds([]);
         setRecordatorios(configuredReminders(undefined, notificationPreferences.defaultReminder));
       }
 
@@ -175,11 +181,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
           )}
         </div>
 
-        <div>
-          <label htmlFor={`${formId}-assignee`} className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Encargado (opcional)</label>
-          <AssigneeSelect id={`${formId}-assignee`} value={encargadoId} onChange={setEncargadoId} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-900 focus:outline-hidden focus:ring-1 focus:ring-brand-900" />
-        </div>
-
+        {officeUser?.role === 'abogado' && <><OfficePeoplePicker value={assistantIds} onChange={setAssistantIds} role="asistente" label="Asignar asistentes" /><OfficePeoplePicker value={sharedIds} onChange={setSharedIds} role="abogado" label="Compartir evento con abogados" excludeCurrent /></>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">

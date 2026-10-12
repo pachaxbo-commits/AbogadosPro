@@ -10,12 +10,24 @@ import { useAuth } from '../../context/AuthContext';
 import { taskNotifications } from '../../services/taskNotifications';
 import { useProfile } from '../../context/ProfileContext';
 import { caseFollowUp } from '../../services/caseFollowUp';
+import { useOffice } from '../../context/OfficeContext';
+import { listSharedNotices, sharedNoticesChanged } from '../../services/demoShareNotifications';
+import type { SharedNotice } from '../../services/demoShareNotifications';
 
 export function TaskNotifications() {
+  const { user: officeUser, users } = useOffice();
+  const [sharedNotices, setSharedNotices] = useState<SharedNotice[]>([]);
+  const { userProfile, currentUser, isDemo } = useAuth();
+  useEffect(() => {
+    const refresh = () => setSharedNotices(isDemo && officeUser ? listSharedNotices(officeUser.id) : []);
+    refresh();
+    window.addEventListener(sharedNoticesChanged, refresh);
+    window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener(sharedNoticesChanged, refresh); window.removeEventListener('storage', refresh); };
+  }, [officeUser?.id, isDemo]);
   const { notificationPreferences } = useProfile();
   const { tasks, tasksError, casesWithDetails, events, activities, documents, loading } = useLegalData();
   const now = useTaskClock();
-  const { userProfile, currentUser, isDemo } = useAuth();
   const scope = currentUser ? currentUser.uid + ':' + userProfile?.workspaceId : 'demo';
   const alerts = useMemo(() => {
     const taskItems = taskNotifications(tasks, now).relevant.map(task => ({ key: 'task:' + task.id + ':' + task.fechaLimite + ':' + task.horaLimite, title: task.titulo, casoId: task.casoId, label: 'Tarea · ' + taskTiming(task, now).label, date: formatFecha(task.fechaLimite) + (task.horaLimite ? ' · ' + task.horaLimite : ''), to: '/tareas?caso=' + encodeURIComponent(task.casoId) }));
@@ -27,7 +39,10 @@ export function TaskNotifications() {
     });
     return [...caseItems, ...eventItems, ...taskItems];
   }, [tasks, events, casesWithDetails, activities, documents, now]);
+  const pendingShares = sharedNotices.filter(item => !item.readAt);
   const relevant = alerts;
+  const sharedText = (item: SharedNotice) => `${users.find(user => user.id === item.actorId)?.displayName || 'Un abogado'} compartió contigo ${item.kind === 'case' ? 'el caso' : item.kind === 'task' ? 'la tarea' : 'el evento'} ${item.title}.`;
+  const sharedLink = (item: SharedNotice) => item.kind === 'case' ? `/casos/${encodeURIComponent(item.itemId)}` : item.kind === 'task' ? `/tareas?compartida=${encodeURIComponent(item.itemId)}` : `/agenda?compartido=${encodeURIComponent(item.itemId)}`;
   const overdue = tasks.some(task => taskTiming(task, now).kind === 'vencida');
   const [noticeTo, setNoticeTo] = useState('/agenda');
   const [message, setMessage] = useState('');
@@ -37,13 +52,19 @@ export function TaskNotifications() {
   const bell = useRef<HTMLButtonElement>(null);
   const id = useId();
   useEffect(() => {
-    if (loading || !notificationPreferences.internalEnabled || !notificationPreferences.entryNotices) return;
+    if (loading || pendingShares.length || !notificationPreferences.internalEnabled || !notificationPreferences.entryNotices) return;
     const timer = setTimeout(() => {
       const fresh = alerts.filter(alert => claimAlertNotice(scope, alert.key));
       if (fresh.length) { setNoticeTo(fresh[0].to); setMessage(fresh[0].label + ': ' + fresh[0].title + (fresh.length > 1 ? ' · ' + (fresh.length - 1) + ' alertas más' : '')); setToast(true); }
     }, 0);
     return () => clearTimeout(timer);
-  }, [loading, alerts, scope, notificationPreferences.internalEnabled, notificationPreferences.entryNotices]);
+  }, [loading, alerts, scope, pendingShares.length, notificationPreferences.internalEnabled, notificationPreferences.entryNotices]);
+  useEffect(() => {
+    if (loading || !notificationPreferences.internalEnabled || !notificationPreferences.entryNotices || !pendingShares.length) return;
+    setNoticeTo(sharedLink(pendingShares[0]));
+    setMessage(sharedText(pendingShares[0]));
+    setToast(true);
+  }, [loading, officeUser?.id, pendingShares[0]?.id, notificationPreferences.internalEnabled, notificationPreferences.entryNotices]);
   useEffect(() => { if (!notificationPreferences.internalEnabled || !notificationPreferences.entryNotices) setToast(false); }, [notificationPreferences.internalEnabled, notificationPreferences.entryNotices]);
   useEffect(() => {
     if (!toast) return;
@@ -59,17 +80,17 @@ export function TaskNotifications() {
   }, [open]);
   if (!notificationPreferences.internalEnabled) return null;
   return <div ref={root} className="relative">
-    <button ref={bell} type="button" aria-label={`Alertas${relevant.length ? `: ${relevant.length} alertas próximas` : ''}`} aria-expanded={open} aria-controls={id} onClick={() => { setOpen((value) => !value); setToast(false); }} className="relative flex h-10 w-10 items-center justify-center rounded-md text-slate-200 hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
-      <Bell className="h-5 w-5" />{relevant.length > 0 && <span className="absolute -right-1 -top-0.5 min-w-4 rounded-full bg-amber-200 px-1 text-[10px] font-bold text-brand-950">{relevant.length}</span>}
+    <button ref={bell} type="button" aria-label={`Alertas${relevant.length + pendingShares.length ? `: ${relevant.length + pendingShares.length} pendientes` : ''}`} aria-expanded={open} aria-controls={id} onClick={() => { setOpen((value) => !value); setToast(false); }} className="relative flex h-10 w-10 items-center justify-center rounded-md text-slate-200 hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+      <Bell className="h-5 w-5" />{relevant.length + pendingShares.length > 0 && <span className="absolute -right-1 -top-0.5 min-w-4 rounded-full bg-amber-200 px-1 text-[10px] font-bold text-brand-950">{relevant.length + pendingShares.length}</span>}
     </button>
     {open && <section id={id} aria-label="Alertas" className={`fixed left-3 right-3 ${isDemo ? 'top-28' : 'top-16'} sm:absolute sm:left-auto sm:top-auto sm:right-0 z-50 mt-2 sm:w-80 max-h-[calc(100dvh-8rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-sm`}>
       <h2 className="border-b border-slate-100 pb-2 text-sm font-bold">Alertas</h2>
-      {tasksError && <p role="alert" className="py-3 text-sm text-rose-700">{tasksError}</p>}{loading ? <p className="py-3 text-sm">Cargando…</p> : relevant.length === 0 ? <p className="py-3 text-sm text-slate-500">No tienes alertas próximas.</p> : <div className="max-h-80 overflow-y-auto">{relevant.map((alert) => <Link key={alert.key} to={alert.to} onClick={() => setOpen(false)} className="block rounded-md border-b border-slate-100 p-2 hover:bg-brand-50">
+      {tasksError && <p role="alert" className="py-3 text-sm text-rose-700">{tasksError}</p>}{loading ? <p className="py-3 text-sm">Cargando…</p> : relevant.length + sharedNotices.length === 0 ? <p className="py-3 text-sm text-slate-500">No tienes alertas próximas.</p> : <div className="max-h-80 overflow-y-auto">{sharedNotices.map(item => <Link key={item.id} to={sharedLink(item)} onClick={() => setOpen(false)} className={`block rounded-md border-b border-slate-100 p-2 hover:bg-brand-50 ${item.readAt ? 'text-slate-500' : 'bg-amber-50/50'}`}><span className="block text-xs font-semibold text-amber-800">{item.readAt ? 'Compartido · visto' : 'Compartido contigo · pendiente'}</span><span className="block break-words text-sm">{sharedText(item)}</span></Link>)}{relevant.map((alert) => <Link key={alert.key} to={alert.to} onClick={() => setOpen(false)} className="block rounded-md border-b border-slate-100 p-2 hover:bg-brand-50">
         <span className="block text-xs font-semibold text-amber-800">{alert.label}</span><span className="block break-words text-sm font-semibold">{alert.title}</span><span className="mt-1 block text-xs text-slate-500">{casesWithDetails.find(caso => caso.id === alert.casoId)?.nombre || 'Caso no disponible'}</span><span className="mt-1 block text-xs text-slate-600">{alert.date}</span>
       </Link>)}</div>}
       <Link to="/tareas" onClick={() => setOpen(false)} className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-brand-900 hover:underline">Ver todas las tareas →</Link><Link to="/agenda" onClick={() => setOpen(false)} className="ml-3 text-sm font-semibold text-brand-900">Ver Agenda →</Link>
     </section>}
-    {toast && relevant.length > 0 && <div role="status" className={`task-notice fixed right-4 ${isDemo ? 'top-28' : 'top-20'} z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-l-4 bg-white p-4 text-slate-900 shadow-md ${overdue ? 'border-rose-200 border-l-rose-500' : 'border-amber-200 border-l-amber-500'}`}>
+    {toast && (relevant.length > 0 || pendingShares.length > 0) && <div role="status" className={`task-notice fixed right-4 ${isDemo ? 'top-28' : 'top-20'} z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-l-4 bg-white p-4 text-slate-900 shadow-md ${overdue ? 'border-rose-200 border-l-rose-500' : 'border-amber-200 border-l-amber-500'}`}>
       <button type="button" aria-label="Cerrar aviso de alertas" onClick={() => setToast(false)} className="float-right ml-2 rounded p-1 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>
       <AlertTriangle aria-hidden="true" className={`mb-2 h-5 w-5 ${overdue ? 'text-rose-600' : 'text-amber-600'}`} /><p className="text-sm font-semibold">{message}</p><p className="mt-1 text-xs text-slate-500">Revisa tus pendientes.</p><Link to={noticeTo} onClick={() => setToast(false)} className="mt-2 inline-flex min-h-9 items-center text-sm font-semibold text-brand-900">Ver detalle →</Link>
     </div>}

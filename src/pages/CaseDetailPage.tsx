@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
-import { useProfile } from '../context/ProfileContext';
+import { useOffice } from '../context/OfficeContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { ActivityTimeline } from '../components/activities/ActivityTimeline';
 import { ActivityFormModal } from '../components/activities/ActivityFormModal';
@@ -21,8 +21,11 @@ import { TaskSummary } from '../components/tasks/TaskSummary';
 import { CaseDocuments } from '../components/documents/CaseDocuments';
 import { EventResultAction, EventResultStatus } from '../components/events/EventResultAction';
 import { financialDate, compareFinancialDate } from '../services/finance';
+import { expenseReimbursementStatus } from '../services/expenseReimbursement';
 import { formatBs, formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
 import { AlertBadge } from '../components/common/AlertBadge';
+import { SharedWithLabel } from '../components/common/SharedWithLabel';
+import { markSharedNoticeRead } from '../services/demoShareNotifications';
 import {
   User,
   ArrowLeft,
@@ -40,11 +43,13 @@ type TabType = 'resumen' | 'actividad' | 'agenda' | 'documentos' | 'finanzas';
 
 export const CaseDetailPage: React.FC = () => {
   const navigate = useNavigate();
-  const { assignees } = useProfile();
+  const { users, user: officeUser } = useOffice();
+  const assistant = officeUser?.role === 'asistente';
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     getCaseWithDetails,
+    cases,
     clients,
     activities,
     payments,
@@ -54,13 +59,14 @@ export const CaseDetailPage: React.FC = () => {
     deleteExpense,
     deleteReimbursement,
     deleteCase,
+    updateCase,
     eventsWithCase,
     documents,
     documentsError,
   } = useLegalData();
 
   const tabParam = searchParams.get('tab') as TabType;
-  const activeTab: TabType = ['resumen', 'actividad', 'agenda', 'documentos', 'finanzas'].includes(tabParam)
+  const activeTab: TabType = (!assistant || ['resumen', 'agenda'].includes(tabParam)) && ['resumen', 'actividad', 'agenda', 'documentos', 'finanzas'].includes(tabParam)
     ? tabParam
     : 'resumen';
   const selectedEventId = searchParams.get('evento');
@@ -100,6 +106,10 @@ export const CaseDetailPage: React.FC = () => {
   const [financeError, setFinanceError] = useState('');
   const [financeSuccess, setFinanceSuccess] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
+  const [sharingError, setSharingError] = useState('');
+  const [sharingBusy, setSharingBusy] = useState(false);
+  const [sharing, setSharing] = useState<Record<string, 'read' | 'collaborate'>>({});
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   const [isCaseDeleteOpen, setIsCaseDeleteOpen] = useState(false);
@@ -109,6 +119,20 @@ export const CaseDetailPage: React.FC = () => {
   const [taskSuccess, setTaskSuccess] = useState('');
 
   const caso = id ? getCaseWithDetails(id) : undefined;
+  useEffect(() => {
+    if (caso && officeUser?.id && caso.sharedWithUserIds?.includes(officeUser.id)) markSharedNoticeRead('case', caso.id, officeUser.id);
+  }, [caso?.id, caso?.sharedWithUserIds, officeUser?.id]);
+  const canManageCase = !officeUser || caso?.ownerUserId === officeUser.id;
+  const canShareCase = Boolean(officeUser && caso?.ownerUserId === officeUser.id);
+  const canEditCase = canManageCase || Boolean(officeUser && caso?.sharePermissions?.[officeUser.id] === 'collaborate');
+  const openSharing = () => { if (!caso) return; setSharing(Object.fromEntries((caso.sharedWithUserIds || []).map(userId => [userId, caso.sharePermissions?.[userId] || 'read']))); setSharingError(''); setSharingOpen(true); };
+  const saveSharing = async () => {
+    if (!caso || !canShareCase) return;
+    setSharingBusy(true); setSharingError('');
+    try { const source = cases.find(item => item.id === caso.id); if (!source) throw new Error('Caso no disponible.'); await updateCase(source.id, { ...source, sharedWithUserIds: Object.keys(sharing), sharePermissions: sharing }); setSharingOpen(false); }
+    catch (error) { setSharingError(error instanceof Error ? error.message : 'No se pudo compartir el caso.'); }
+    finally { setSharingBusy(false); }
+  };
 
   useEffect(() => {
     if (!isActionsOpen) return;
@@ -232,6 +256,7 @@ export const CaseDetailPage: React.FC = () => {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
               {caso.nombre}
             </h1>
+            <SharedWithLabel kind="case" itemId={caso.id} ownerUserId={caso.ownerUserId} sharedWithUserIds={caso.sharedWithUserIds} sharePermissions={caso.sharePermissions} />
 
             {urgentEvent?.alertaVisual && (
               <AlertBadge alerta={{
@@ -270,15 +295,17 @@ export const CaseDetailPage: React.FC = () => {
           </div>
 
           <div className="flex flex-col items-start lg:items-end gap-3">
-            <div className="flex flex-wrap gap-2">
-              <button
+            {assistant && <button type="button" onClick={() => { setFinanceSuccess(''); setSelectedExpense(undefined); setIsExpenseModalOpen(true); }} className="rounded-md bg-brand-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand-800">Registrar gasto</button>}
+            <div className={assistant ? 'hidden' : 'flex flex-wrap gap-2'}>
+              {canShareCase && <button type="button" onClick={openSharing} className="px-3.5 py-2 text-xs font-semibold text-brand-900 bg-white border border-slate-300 rounded-md hover:bg-brand-50">Compartir</button>}
+              {canEditCase && <button
                 type="button"
                 onClick={() => setIsEditModalOpen(true)}
                 className="px-3.5 py-2 text-xs font-semibold text-brand-900 bg-white border border-slate-300 rounded-md hover:bg-brand-50 transition-colors"
               >
                 Editar caso
-              </button>
-              <div ref={actionsRef} className="relative">
+              </button>}
+              {canManageCase && <div ref={actionsRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setIsActionsOpen((open) => !open)}
@@ -311,9 +338,9 @@ export const CaseDetailPage: React.FC = () => {
                     </button>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
-          {/* Resumen económico rápido en cabecera */}
+          {/* Resumen económico rápido en cabecera */}{!assistant && (
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs flex flex-col sm:flex-row lg:flex-col justify-between gap-2 sm:gap-4 lg:gap-1.5 min-w-[200px]">
             <div className="flex justify-between items-center gap-3">
               <span className="text-slate-500">Honorarios:</span>
@@ -331,7 +358,7 @@ export const CaseDetailPage: React.FC = () => {
                 {formatBs(caso.totalPendiente)}
               </span>
             </div>
-          </div>
+          </div>)}
           </div>
         </div>
 
@@ -350,7 +377,7 @@ export const CaseDetailPage: React.FC = () => {
             <span>RESUMEN</span>
           </button>
 
-          <button
+{!assistant && (          <button
             type="button"
             onClick={() => handleTabChange('actividad')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
@@ -361,7 +388,7 @@ export const CaseDetailPage: React.FC = () => {
           >
             <Clock className="w-4 h-4" />
             <span>ACTIVIDAD ({caseActivities.length})</span>
-          </button>
+          </button>)}
 
           <button
             type="button"
@@ -376,15 +403,15 @@ export const CaseDetailPage: React.FC = () => {
             <span>AGENDA ({caseEvents.length})</span>
           </button>
 
-          <button
+{!assistant && (          <button
             type="button"
             onClick={() => handleTabChange('documentos')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'documentos' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
           >
             <FileText className="w-4 h-4" /><span>DOCUMENTOS ({documentsError ? '—' : documentCount})</span>
-          </button>
+          </button>)}
 
-          <button
+{!assistant && (          <button
             type="button"
             onClick={() => handleTabChange('finanzas')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
@@ -395,12 +422,12 @@ export const CaseDetailPage: React.FC = () => {
           >
             <Wallet className="w-4 h-4" />
             <span>FINANZAS</span>
-          </button>
+          </button>)}
         </div>
       </div>
 
       {/* CONTENIDO DE PESTAÑAS */}
-      {activeTab === 'documentos' && <CaseDocuments key={caso.id} casoId={caso.id} />}
+      {!assistant && activeTab === 'documentos' && <CaseDocuments key={caso.id} casoId={caso.id} readOnly={!canEditCase} />}
 
       {/* PESTAÑA 1: RESUMEN DEL CASO */}
       {activeTab === 'resumen' && (
@@ -408,11 +435,12 @@ export const CaseDetailPage: React.FC = () => {
           {/* Ficha principal del expediente */}
           <div className="lg:col-span-2 space-y-6">
             {taskSuccess && <p role="status" className="text-sm text-brand-900">{taskSuccess}</p>}
-            <CaseFollowUp caso={caso} />
-            <TaskSummary casoId={caso.id} onNewTask={() => { setTaskSuccess(''); setIsTaskModalOpen(true); }} />
+            <CaseFollowUp caso={caso} canRegister={canEditCase} />
+            <TaskSummary casoId={caso.id} onNewTask={canEditCase || assistant ? () => { setTaskSuccess(''); setIsTaskModalOpen(true); } : undefined} />
+            {assistant && <section className="rounded-xl border border-slate-200 bg-white p-4"><h2 className="text-sm font-bold text-brand-900">Gastos del caso</h2><p className="mt-1 text-xs text-slate-500">Gastos operativos, separados de honorarios y pagos.</p><div className="mt-3 space-y-2">{caseExpenses.length ? caseExpenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2 text-xs"><span><strong>{expense.concepto}</strong> · {expense.reembolsable ? 'Reembolsable · Estado: ' + (expense.reimbursementStatus || 'Sin desglose') : 'No reembolsable'}{expense.registeredByUserId === officeUser?.id && ' · Registrado por ti'}</span><span className="font-mono font-semibold">{formatBs(expense.monto)}</span></div>) : <p className="text-xs text-slate-500">Sin gastos registrados.</p>}</div></section>}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
               <div><h2 className="text-sm font-semibold text-slate-900">Documentos</h2><p className="mt-1 text-xs text-slate-500">{documentsError ? 'No se pudo cargar el recuento' : `${documentCount} ${documentCount === 1 ? 'archivo' : 'archivos'}`}</p></div>
-              <button type="button" onClick={() => handleTabChange('documentos')} className="min-h-11 rounded-md px-2 text-sm font-semibold text-brand-900 hover:bg-brand-50">{documentCount ? 'Ver documentos →' : 'Agregar documento →'}</button>
+    {!assistant && (          <button type="button" onClick={() => handleTabChange('documentos')} className="min-h-11 rounded-md px-2 text-sm font-semibold text-brand-900 hover:bg-brand-50">{documentCount ? 'Ver documentos →' : 'Agregar documento →'}</button>)}
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
               <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
@@ -443,8 +471,8 @@ export const CaseDetailPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">Encargado del caso</span>
-                  <span className="font-semibold text-sm text-slate-900">{caso.encargadoId ? assignees.find((item) => item.id === caso.encargadoId)?.nombre || 'No disponible' : 'Sin encargado'}</span>
+                  <span className="text-slate-400 uppercase tracking-wider font-semibold block mb-0.5">Asistentes asignados</span>
+                  <span className="font-semibold text-sm text-slate-900">{caso.assignedUserIds?.map(userId => users.find(person => person.id === userId)?.displayName || 'No disponible').join(', ') || 'Sin asignar'}</span>
                 </div>
 
                 <div>
@@ -546,7 +574,7 @@ export const CaseDetailPage: React.FC = () => {
               )}
             </div>
 
-            {/* Resumen Financiero Básico */}
+            {/* Resumen Financiero Básico */}{!assistant && (
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
               <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
@@ -591,13 +619,13 @@ export const CaseDetailPage: React.FC = () => {
                   </span>
                 </div>
               </div>
-            </div>
+            </div>)}
           </div>
         </div>
       )}
 
       {/* PESTAÑA 2: ACTIVIDAD (Línea de tiempo) */}
-      {activeTab === 'actividad' && (
+      {!assistant && activeTab === 'actividad' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -683,12 +711,12 @@ export const CaseDetailPage: React.FC = () => {
                       <span>{formatFecha(ev.fecha)}</span>
                       {ev.hora && <span>· {formatHora(ev.hora)}</span>}
                     </div>
-                      <EventMenu evento={ev} onEdit={() => setEditingCalendarEvent(ev)} />
+                      {canManageCase && <EventMenu evento={ev} onEdit={() => setEditingCalendarEvent(ev)} />}
                     </div>
                   </div>
 
                   <h3 className="text-sm font-semibold text-slate-900">{ev.titulo}</h3>
-                  {ev.encargadoId && <p className="mt-1 text-xs text-slate-600">Encargado: {assignees.find((item) => item.id === ev.encargadoId)?.nombre || 'No disponible'}</p>}
+                  {Boolean(ev.assignedUserIds?.length) && <p className="mt-1 text-xs text-slate-600">Asistentes: {ev.assignedUserIds?.map(userId => users.find(person => person.id === userId)?.displayName || 'No disponible').join(', ')}</p>}
                   <EventResultAction event={ev} />
 
                   {ev.juzgado && (
@@ -710,7 +738,7 @@ export const CaseDetailPage: React.FC = () => {
       )}
 
       {/* PESTAÑA 4: FINANZAS DEL CASO */}
-      {activeTab === 'finanzas' && (
+      {!assistant && activeTab === 'finanzas' && (
         <div className="space-y-6">
           {financeSuccess && (
             <div role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
@@ -731,14 +759,14 @@ export const CaseDetailPage: React.FC = () => {
                 </p>
               </div>
 
-              <button
+{canManageCase &&               <button
                 type="button"
                 onClick={() => { setFinanceSuccess(''); setSelectedPayment(undefined); setIsPaymentModalOpen(true); }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-900 rounded-md transition-colors shadow-xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>Registrar Pago</span>
-              </button>
+              </button>}
             </div>
 
             {/* Tres datos solicitados en la consigna */}
@@ -810,9 +838,9 @@ export const CaseDetailPage: React.FC = () => {
                             {formatBs(p.monto)}
                           </td>
                           <td data-label="Acciones" className="px-2 py-2 text-right">
-                            <FinancialRowActions label={`pago de ${formatBs(p.monto)}`}
+                            {canManageCase && <FinancialRowActions label={`pago de ${formatBs(p.monto)}`}
                               onEdit={() => { setSelectedPayment(p); setIsPaymentModalOpen(true); setFinanceSuccess(''); }}
-                              onDelete={() => { setPendingDelete({ type: 'pago', id: p.id, monto: p.monto }); setFinanceError(''); }} />
+                              onDelete={() => { setPendingDelete({ type: 'pago', id: p.id, monto: p.monto }); setFinanceError(''); }} />}
                           </td>
                         </tr>
                       ))}
@@ -839,14 +867,14 @@ export const CaseDetailPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-4">
-                <button
+{canEditCase &&                 <button
                   type="button"
                   onClick={() => { setFinanceSuccess(''); setSelectedExpense(undefined); setIsExpenseModalOpen(true); }}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-900 hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-900 rounded-md transition-colors shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Registrar Gasto</span>
-                </button>
+                </button>}
               </div>
             </div>
 
@@ -866,7 +894,7 @@ export const CaseDetailPage: React.FC = () => {
                   ? <>Pendientes de reembolso: <strong className="font-mono">{formatBs(caso.gastosPendientes)}</strong></>
                   : <strong>✓ {caso.gastosReembolsables > 0 ? 'Gastos reembolsados' : 'Sin gastos pendientes de reembolso'}</strong>}
               </span>
-              {caso.gastosPendientes > 0 && <button type="button" onClick={() => { setSelectedReimbursement(undefined); setIsReimbursementModalOpen(true); setFinanceSuccess(''); }}
+              {caso.gastosPendientes > 0 && canManageCase && <button type="button" onClick={() => { setSelectedReimbursement(undefined); setIsReimbursementModalOpen(true); setFinanceSuccess(''); }}
                 className="rounded-md border border-brand-300 bg-white px-3 py-1.5 font-semibold text-brand-900 hover:bg-brand-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-900">
                 Registrar reembolso
               </button>}
@@ -898,7 +926,7 @@ export const CaseDetailPage: React.FC = () => {
                         <td data-label="Concepto" className="px-4 py-3 font-semibold text-slate-900">
                           <div className="min-w-0">
                             {g.concepto}
-                            <span className="block text-[10px] font-normal text-slate-500">{g.reembolsable === true ? 'Reembolsable' : 'No reembolsable'}</span>
+                            <span className="block text-[10px] font-normal text-slate-500">{g.reembolsable === true ? 'Reembolsable · ' + expenseReimbursementStatus(g, caseReimbursements) : 'No reembolsable'}{g.registeredByUserId && ' · Registró: ' + (users.find(person => person.id === g.registeredByUserId)?.displayName || 'Usuario anterior')}</span>
                           </div>
                         </td>
                         <td data-label="Nota" className="px-4 py-3 text-slate-500">
@@ -908,9 +936,9 @@ export const CaseDetailPage: React.FC = () => {
                           {formatBs(g.monto)}
                         </td>
                         <td data-label="Acciones" className="px-2 py-2 text-right">
-                          <FinancialRowActions label={`gasto de ${formatBs(g.monto)}`}
+                          {canEditCase && <FinancialRowActions label={`gasto de ${formatBs(g.monto)}`}
                             onEdit={() => { setSelectedExpense(g); setIsExpenseModalOpen(true); setFinanceSuccess(''); }}
-                            onDelete={() => { setPendingDelete({ type: 'gasto', id: g.id, monto: g.monto }); setFinanceError(''); }} />
+                            onDelete={() => { setPendingDelete({ type: 'gasto', id: g.id, monto: g.monto }); setFinanceError(''); }} />}
                         </td>
                       </tr>
                     ))}
@@ -930,9 +958,9 @@ export const CaseDetailPage: React.FC = () => {
                     <td className="px-4 py-3 whitespace-nowrap">{financialDate(r)}</td>
                     <td data-label="Nota" className="px-4 py-3">{r.nota || 'Reembolso de gastos'}</td>
                     <td data-label="Monto" className="px-4 py-3 text-right font-mono font-bold text-emerald-800">{formatBs(r.monto)}</td>
-                    <td data-label="Acciones" className="px-2 py-2 text-right"><FinancialRowActions label={`reembolso de ${formatBs(r.monto)}`}
+                    <td data-label="Acciones" className="px-2 py-2 text-right">{canManageCase && <FinancialRowActions label={`reembolso de ${formatBs(r.monto)}`}
                       onEdit={() => { setSelectedReimbursement(r); setIsReimbursementModalOpen(true); setFinanceSuccess(''); }}
-                      onDelete={() => { setPendingDelete({ type: 'reembolso', id: r.id, monto: r.monto }); setFinanceError(''); }} /></td>
+                      onDelete={() => { setPendingDelete({ type: 'reembolso', id: r.id, monto: r.monto }); setFinanceError(''); }} />}</td>
                   </tr>)}</tbody>
                 </table>
               </div>
@@ -980,6 +1008,11 @@ export const CaseDetailPage: React.FC = () => {
         pago={selectedPayment}
         onSuccess={() => { setFinanceSuccess(selectedPayment ? 'Pago actualizado correctamente.' : 'Pago registrado correctamente.'); setSearchParams({ tab: 'finanzas' }); }}
       />}
+      {sharingOpen && <Modal isOpen title="Compartir caso" subtitle={caso.nombre} onClose={() => setSharingOpen(false)} maxWidth="sm">
+        <div className="space-y-3">{users.filter(person => ((person.active && person.role === 'abogado') || sharing[person.id]) && person.id !== officeUser?.id).map(person => <div key={person.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 p-3"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(sharing[person.id])} onChange={event => setSharing(previous => { const next = { ...previous }; if (event.target.checked) next[person.id] = 'read'; else delete next[person.id]; return next; })} />{person.displayName}</label>{sharing[person.id] && <select aria-label={`Permiso de ${person.displayName}`} value={sharing[person.id]} onChange={event => setSharing(previous => ({ ...previous, [person.id]: event.target.value as 'read' | 'collaborate' }))} className="rounded border border-slate-200 p-2 text-xs"><option value="read">Solo lectura</option><option value="collaborate">Colaborar</option></select>}</div>)}
+        {sharingError && <p role="alert" className="text-sm text-rose-700">{sharingError}</p>}
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setSharingOpen(false)} className="rounded border border-slate-200 px-4 py-2 text-sm">Cancelar</button><button type="button" disabled={sharingBusy} onClick={() => void saveSharing()} className="rounded bg-brand-900 px-4 py-2 text-sm font-semibold text-white">Guardar</button></div></div>
+      </Modal>}
       {isExpenseModalOpen && <ExpenseFormModal
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}

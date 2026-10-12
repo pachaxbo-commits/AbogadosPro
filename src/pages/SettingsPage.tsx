@@ -6,7 +6,6 @@ import type { NotificationPreferences } from '../repositories/notificationPrefer
 import type { RecordatorioEvento } from '../types';
 import { validateReminders } from '../services/reminders';
 import { CategorySettings } from '../components/settings/CategorySettings';
-import { AssigneeSettings } from '../components/settings/AssigneeSettings';
 import { CURRENCIES } from '../repositories/configurationRepository';
 
 const appearances: { value: Appearance; label: string; Icon: typeof Sun }[] = [
@@ -48,7 +47,6 @@ export function SettingsPage() {
       </div>
     </section>
     <CategorySettings />
-    <AssigneeSettings />
     <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="settings-finances">
       <h2 id="settings-finances" className="text-lg font-semibold text-brand-900">Finanzas</h2>
       <label htmlFor="default-currency" className="mt-4 block text-sm font-medium text-slate-800">Moneda predeterminada</label>

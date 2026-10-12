@@ -1,4 +1,13 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "casos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assignedUserIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "assistantVisible", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

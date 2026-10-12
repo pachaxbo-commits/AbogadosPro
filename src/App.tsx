@@ -1,6 +1,9 @@
 import React, { useLayoutEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { OfficeProvider, useOffice } from './context/OfficeContext';
+import { OfficeEntry } from './components/auth/OfficeEntry';
+import { officeAuthEnabled } from './services/internalAuth';
 import { useAuth } from './context/AuthContext';
 import { LegalDataProvider } from './context/LegalDataContext';
 import { ProfileProvider } from './context/ProfileContext';
@@ -22,6 +25,8 @@ import { LoginPage } from './pages/LoginPage';
 import { LandingPage } from './pages/LandingPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AdminPage } from './pages/AdminPage';
+import { OfficeUsersPage } from './pages/OfficeUsersPage';
+import { InternalProfilePage } from './pages/InternalProfilePage';
 import { BRAND_CONFIG } from './config/brand';
 
 function MobileNavigationPosition() {
@@ -39,6 +44,7 @@ function MobileNavigationPosition() {
 function AppContent() {
   const { pathname } = useLocation();
   const { currentUser, isDemo, loading } = useAuth();
+  const { user: officeUser } = useOffice();
   const showLanding = pathname === '/' && !loading && !currentUser && !isDemo;
   const showPublicPage = showLanding || pathname === '/login';
 
@@ -115,7 +121,7 @@ function AppContent() {
                     path="/mi-perfil"
                     element={
                       <ProtectedRoute>
-                        <ProfilePage />
+                        {(officeAuthEnabled || isDemo) && officeUser ? <InternalProfilePage /> : <ProfilePage />}
                       </ProtectedRoute>
                     }
                   />
@@ -140,6 +146,7 @@ function AppContent() {
                     }
                   />
 
+{(officeAuthEnabled || isDemo) && <Route path="/usuarios-estudio" element={<ProtectedRoute><OfficeUsersPage /></ProtectedRoute>} />}
                   {/* Administración */}
                   <Route
                     path="/admin"
@@ -184,8 +191,16 @@ function AppContent() {
   );
 }
 
+function OfficeGate() {
+  const { currentUser, userProfile, isDemo, loading } = useAuth();
+  const { state } = useOffice();
+  if (isDemo && state !== 'active') return <OfficeEntry />;
+  if (officeAuthEnabled && !loading && currentUser && !isDemo && userProfile?.role !== 'admin' && state !== 'active') return <OfficeEntry />;
+  return <LegalDataProvider><ProfileProvider><AppContent /></ProfileProvider></LegalDataProvider>;
+}
+
 export function App() {
-  return <AuthProvider><LegalDataProvider><ProfileProvider><BrowserRouter><AppContent /></BrowserRouter></ProfileProvider></LegalDataProvider></AuthProvider>;
+  return <AuthProvider><OfficeProvider><BrowserRouter><OfficeGate /></BrowserRouter></OfficeProvider></AuthProvider>;
 }
 
 export default App;

@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useLegalData } from '../../context/LegalDataContext';
 import { useProfile } from '../../context/ProfileContext';
-import { AssigneeSelect } from '../common/AssigneeSelect';
+
+import { OfficePeoplePicker } from '../common/OfficePeoplePicker';
+import { useOffice } from '../../context/OfficeContext';
 import { AreaCaso, Caso, EstadoCaso, ParticipacionCaso, TipoIdentificacionJudicial } from '../../types';
 
 interface CaseFormModalProps {
@@ -22,10 +24,11 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
 }) => {
   const { clients, addCase, updateCase } = useLegalData();
   const { configuration } = useProfile();
+  const { user: officeUser } = useOffice();
 
   const [nombre, setNombre] = useState(caso?.nombre || '');
   const [clienteId, setClienteId] = useState(caso?.clienteId || preselectedClientId || (clients[0]?.id || ''));
-  const [encargadoId, setEncargadoId] = useState(caso?.encargadoId || '');
+  const [assistantIds, setAssistantIds] = useState(caso?.assignedUserIds || []);
   const [seguimiento, setSeguimiento] = useState(() => caso?.seguimientoDias === null ? 'none' : [7, 15, 30, 60].includes(caso?.seguimientoDias ?? 30) ? String(caso?.seguimientoDias ?? 30) : 'custom');
   const [customDays, setCustomDays] = useState(() => caso?.seguimientoDias && ![7, 15, 30, 60].includes(caso.seguimientoDias) ? String(caso.seguimientoDias) : '');
   const [area, setArea] = useState<AreaCaso>(caso?.area || configuration.categories.areas[0]);
@@ -75,7 +78,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
       const data = {
         nombre: nombre.trim(),
         clienteId: currentClientId,
-        encargadoId,
+        ...(officeUser ? { assignedUserIds: assistantIds } : {}),
         seguimientoDias,
         area,
         estado,
@@ -95,7 +98,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
         setHonorariosAcordados('');
         setJuzgadoTribunal('');
         setDescripcion('');
-        setEncargadoId('');
+        setAssistantIds([]);
         setSeguimiento('30');
         setCustomDays('');
       }
@@ -213,10 +216,7 @@ export const CaseFormModal: React.FC<CaseFormModalProps> = ({
             </select>
           </div>
         </div>
-        <div>
-          <label htmlFor="case-assignee" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Encargado del caso (opcional)</label>
-          <AssigneeSelect id="case-assignee" value={encargadoId} onChange={setEncargadoId} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-900 focus:outline-hidden focus:ring-1 focus:ring-brand-900" />
-        </div>
+        {officeUser && <OfficePeoplePicker value={assistantIds} onChange={setAssistantIds} role="asistente" label="Asignar asistentes" />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="case-follow-up" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Seguimiento</label>

@@ -2,7 +2,7 @@ import { eventState } from '../services/eventResults';
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
-import { useProfile } from '../context/ProfileContext';
+import { useOffice } from '../context/OfficeContext';
 import { useTaskClock } from '../hooks/useTaskClock';
 import { caseFollowUp } from '../services/caseFollowUp';
 import { formatFecha } from '../services/formatters';
@@ -31,7 +31,7 @@ import {
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { assignees } = useProfile();
+  const { users, user: officeUser } = useOffice();
   const now = useTaskClock();
   const {
     cases,
@@ -53,7 +53,7 @@ export const DashboardPage: React.FC = () => {
     .filter(item => item.review.state === 'requiere')
     .sort((a, b) => b.review.overdueDays - a.review.overdueDays), [cases, activities, documents, tasks, events, now]);
   const clientNames = useMemo(() => new Map(clients.map(client => [client.id, client.nombre])), [clients]);
-  const assigneeNames = useMemo(() => new Map(assignees.map(assignee => [assignee.id, assignee.nombre])), [assignees]);
+  const assigneeNames = useMemo(() => new Map(users.map(person => [person.id, person.displayName])), [users]);
 
   // Métricas
   const activeCasesCount = cases.filter(
@@ -167,14 +167,14 @@ export const DashboardPage: React.FC = () => {
           value={upcomingPlazos}
           icon={<Clock className="w-5 h-5 text-brand-900" />}
         />
-        <StatCard
+        {officeUser?.role !== 'asistente' && <StatCard
           title="Por cobrar"
           compact
           className="rounded-xl border-t-2 border-t-amber-300 shadow-sm"
           to="/finanzas#saldos-pendientes"
           value={formatBs(financialTotals.totalPendienteClientes)}
           icon={<Wallet className="w-5 h-5 text-brand-900" />}
-        />
+        />}
         </div>
       </div>
 
@@ -184,7 +184,7 @@ export const DashboardPage: React.FC = () => {
           {overdueCases.length === 0 ? <p className="px-5 py-4 text-sm text-slate-600">No hay casos pendientes de seguimiento.</p> : overdueCases.map(({ caso, review }) => <div key={caso.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900">{caso.nombre}</p>
-              <p className="mt-0.5 text-xs text-slate-600">{clientNames.get(caso.clienteId) || 'Cliente no disponible'} · Encargado: {caso.encargadoId ? assigneeNames.get(caso.encargadoId) || 'No disponible' : 'Sin encargado'}</p>
+              <p className="mt-0.5 text-xs text-slate-600">{clientNames.get(caso.clienteId) || 'Cliente no disponible'} · Asistentes: {caso.assignedUserIds?.map(id => assigneeNames.get(id) || 'No disponible').join(', ') || 'Sin asignar'}</p>
               <p className="mt-1 text-xs text-slate-500">Último movimiento: {review.lastMovement ? `${formatFecha(review.lastMovement.fecha)} · ${review.lastMovement.descripcion}` : `Sin movimientos · desde ${formatFecha(caso.fechaCreacion)}`}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

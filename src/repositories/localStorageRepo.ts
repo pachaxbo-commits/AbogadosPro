@@ -336,6 +336,7 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   private validateExpense(data: Omit<Gasto, 'id'>, excludeId?: string): void {
     if (!this.cases.some((item) => item.id === data.casoId) || !data.concepto.trim() ||
       !Number.isFinite(data.monto) || data.monto <= 0 || !data.fecha) throw new Error('Gasto inválido');
+    if (excludeId) { const linked = this.reimbursements.filter(item => item.gastoId === excludeId).reduce((sum, item) => sum + item.monto, 0); if (linked > 0 && (!data.reembolsable || data.monto < linked)) throw new Error('El gasto tiene reembolsos vinculados.'); }
     const nextReimbursable = this.reimbursableTotal(data.casoId, excludeId) + (data.reembolsable ? data.monto : 0);
     if (this.reimbursedTotal(data.casoId) > nextReimbursable) throw new Error('Gasto inferior a reembolsos recibidos');
   }
@@ -353,6 +354,7 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   async deleteExpense(id: string): Promise<void> {
     const existing = this.expenses.find((item) => item.id === id);
     if (!existing) throw new Error('Gasto no encontrado');
+    if (this.reimbursements.some(item => item.gastoId === id)) throw new Error('Gasto con reembolsos asociados');
     const nextReimbursable = this.reimbursableTotal(existing.casoId, id);
     if (this.reimbursedTotal(existing.casoId) > nextReimbursable) throw new Error('Gasto con reembolsos asociados');
     this.expenses = this.expenses.filter((item) => item.id !== id);
@@ -366,6 +368,11 @@ export class LocalStorageLegalRepository implements ILegalRepository {
   private validateReimbursement(data: Omit<Reembolso, 'id'>, excludeId?: string): void {
     if (!this.cases.some((item) => item.id === data.casoId) || !Number.isFinite(data.monto) ||
       data.monto <= 0 || !data.fecha) throw new Error('Reembolso inválido');
+    if (data.gastoId) {
+      const expense = this.expenses.find(item => item.id === data.gastoId && item.casoId === data.casoId && item.reembolsable);
+      const linked = this.reimbursements.filter(item => item.gastoId === data.gastoId && item.id !== excludeId).reduce((sum, item) => sum + item.monto, 0);
+      if (!expense || linked + data.monto > expense.monto) throw new Error('Reembolso superior al gasto relacionado');
+    }
     if (this.reimbursedTotal(data.casoId, excludeId) + data.monto > this.reimbursableTotal(data.casoId)) {
       throw new Error('Reembolso superior al saldo');
     }

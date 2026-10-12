@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
-import { useProfile } from '../context/ProfileContext';
+import { useOffice } from '../context/OfficeContext';
 import { EventCard } from '../components/events/EventCard';
 import { EventFormModal } from '../components/events/EventFormModal';
 import { PageHeroHeader } from '../components/common/PageHeroHeader';
@@ -9,6 +9,7 @@ import { Evento } from '../types';
 import { taskToday } from '../services/tasks';
 import { eventState, eventHasPassed, pendingEventResult } from '../services/eventResults';
 import { useTaskClock } from '../hooks/useTaskClock';
+import { markSharedNoticeRead } from '../services/demoShareNotifications';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -22,10 +23,14 @@ type FilterType = 'todos' | 'hoy' | 'proximos' | 'audiencias' | 'plazos' | 'reun
 type DateFilter = 'sin_filtro' | 'hoy' | 'semana' | 'mes' | 'rango';
 
 export const AgendaPage: React.FC = () => {
-  const { events, eventsWithCase } = useLegalData();
-  const { assignees } = useProfile();
+  const { events, eventsWithCase, cases } = useLegalData();
+  const { users, user: officeUser } = useOffice();
   const now = useTaskClock();
   const [searchParams] = useSearchParams();
+  const sharedEventId = searchParams.get('compartido') || '';
+  useEffect(() => {
+    if (sharedEventId && officeUser && events.some(event => event.id === sharedEventId && event.sharedWithUserIds?.includes(officeUser.id))) markSharedNoticeRead('event', sharedEventId, officeUser.id);
+  }, [sharedEventId, officeUser?.id, events]);
   const [filter, setFilter] = useState<FilterType>(() => {
     const requestedFilter = searchParams.get('filtro');
     return requestedFilter === 'audiencias' || requestedFilter === 'plazos' ? requestedFilter : 'proximos';
@@ -35,7 +40,7 @@ export const AgendaPage: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<DateFilter>('sin_filtro');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [encargadoId, setEncargadoId] = useState('');
+  const [assistantId, setAssistantId] = useState('');
 
   const hoyStr = taskToday(now);
   const today = new Date(`${hoyStr}T00:00:00Z`);
@@ -48,13 +53,14 @@ export const AgendaPage: React.FC = () => {
 
   const filteredEvents = useMemo(() => {
     return eventsWithCase.filter((ev) => {
+      if (sharedEventId) return ev.id === sharedEventId;
       const matchesDate = dateFilter === 'sin_filtro' ||
         (dateFilter === 'hoy' && ev.fecha === hoyStr) ||
         (dateFilter === 'semana' && ev.fecha >= weekStart && ev.fecha <= weekEnd) ||
         (dateFilter === 'mes' && ev.fecha.startsWith(hoyStr.slice(0, 7))) ||
         (dateFilter === 'rango' && (!dateFrom || ev.fecha >= dateFrom) && (!dateTo || ev.fecha <= dateTo));
       if (!matchesDate) return false;
-      if (encargadoId && (encargadoId === '__unassigned__' ? Boolean(ev.encargadoId) : ev.encargadoId !== encargadoId)) return false;
+      if (assistantId && (assistantId === '__unassigned__' ? Boolean(ev.assignedUserIds?.length) : !ev.assignedUserIds?.includes(assistantId))) return false;
       switch (filter) {
         case 'hoy':
           return ev.fecha === hoyStr;
@@ -73,7 +79,7 @@ export const AgendaPage: React.FC = () => {
           return true;
       }
     });
-  }, [eventsWithCase, filter, hoyStr, weekStart, weekEnd, dateFilter, dateFrom, dateTo, encargadoId, now]);
+  }, [eventsWithCase, filter, hoyStr, weekStart, weekEnd, dateFilter, dateFrom, dateTo, assistantId, now, sharedEventId]);
 
   const countHoy = eventsWithCase.filter((e) => e.fecha === hoyStr).length;
   const countAudiencias = eventsWithCase.filter((e) => e.tipo === 'Audiencia' && e.fecha >= hoyStr && eventState(e) === 'Próximo').length;
@@ -188,12 +194,7 @@ export const AgendaPage: React.FC = () => {
           <option value="mes">Este mes</option>
           <option value="rango">Rango personalizado</option>
         </select>
-        <label htmlFor="agenda-encargado" className="ml-2 text-xs font-semibold text-slate-600">Encargado:</label>
-        <select id="agenda-encargado" value={encargadoId} onChange={(e) => setEncargadoId(e.target.value)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900">
-          <option value="">Todos</option>
-          <option value="__unassigned__">Sin encargado</option>
-          {assignees.map((item) => <option key={item.id} value={item.id}>{item.nombre}{item.estado === 'Inactivo' ? ' (inactivo)' : ''}</option>)}
-        </select>
+        <label htmlFor="agenda-assistant" className="ml-2 text-xs font-semibold text-slate-600">Asistente:</label><select id="agenda-assistant" value={assistantId} onChange={(e) => setAssistantId(e.target.value)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs"><option value="">Todos</option><option value="__unassigned__">Sin asignar</option>{users.filter(item => item.role === 'asistente').map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select>
         {dateFilter === 'rango' && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
             <label htmlFor="agenda-desde">Desde</label>
@@ -230,7 +231,7 @@ export const AgendaPage: React.FC = () => {
               key={ev.id}
               evento={ev}
               showCaseLink={true}
-              onEdit={() => setEditingEvent(events.find((event) => event.id === ev.id) || null)}
+              onEdit={(!officeUser || officeUser.role === 'abogado' && (ev.ownerUserId === officeUser.id || cases.find(item => item.id === ev.casoId)?.ownerUserId === officeUser.id)) ? () => setEditingEvent(events.find((event) => event.id === ev.id) || null) : undefined}
             />
           ))
         )}

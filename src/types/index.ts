@@ -20,7 +20,14 @@ export type TipoEvento = string;
 export type PrioridadTarea = 'Alta' | 'Media' | 'Normal';
 export type EstadoTarea = 'Pendiente' | 'Completada';
 
-export interface Tarea {
+export interface OfficeAccess {
+  ownerUserId?: string;
+  assignedUserIds?: string[];
+  sharedWithUserIds?: string[];
+  sharePermissions?: Record<string, 'read' | 'collaborate'>;
+}
+
+export interface Tarea extends OfficeAccess {
   id: string;
   casoId: string;
   encargadoId?: string;
@@ -36,7 +43,7 @@ export interface Tarea {
   resultadoFinalizacion?: string;
 }
 
-export type DatosTarea = Pick<Tarea, 'casoId' | 'encargadoId' | 'titulo' | 'descripcion' | 'fechaLimite' | 'horaLimite' | 'prioridad'>;
+export type DatosTarea = Pick<Tarea, 'casoId' | 'encargadoId' | 'titulo' | 'descripcion' | 'fechaLimite' | 'horaLimite' | 'prioridad' | 'assignedUserIds' | 'sharedWithUserIds'>;
 
 export interface DocumentoCaso {
   id: string;
@@ -54,7 +61,7 @@ export interface DocumentoCaso {
 }
 export type DatosDocumento = Pick<DocumentoCaso, 'nombre' | 'categoria' | 'descripcion' | 'fechaDocumento' | 'taskId'>;
 
-export interface Cliente {
+export interface Cliente extends OfficeAccess {
   id: string;
   tipoCliente?: 'Persona' | 'Empresa'; // Opcional para registros anteriores
   nombre: string;
@@ -66,7 +73,8 @@ export interface Cliente {
   fechaRegistro: string;
 }
 
-export interface Caso {
+export interface Caso extends OfficeAccess {
+  assistantVisible?: boolean;
   id: string;
   nombre: string;
   clienteId: string;
@@ -83,7 +91,7 @@ export interface Caso {
   juzgadoTribunal?: string;
 }
 
-export interface Actividad {
+export interface Actividad extends OfficeAccess {
   id: string;
   casoId: string;
   tipo: TipoActividad;
@@ -110,7 +118,7 @@ export interface ResultadoEvento extends DatosResultadoEvento {
 
 export interface RecordatorioEvento { cantidad: number; unidad: 'minutos' | 'horas' | 'días' | 'semanas' }
 
-export interface Evento {
+export interface Evento extends OfficeAccess {
   id: string;
   casoId: string;
   encargadoId?: string;
@@ -128,7 +136,7 @@ export interface Evento {
   recordatorios?: { unDiaAntes: boolean; unaHoraAntes: boolean; personalizados?: RecordatorioEvento[] };
 }
 
-export interface Pago {
+export interface Pago extends OfficeAccess {
   id: string;
   casoId: string;
   monto: number; // en Bs
@@ -137,7 +145,7 @@ export interface Pago {
   nota?: string;
 }
 
-export interface Gasto {
+export interface Gasto extends OfficeAccess {
   id: string;
   casoId: string;
   concepto: string;
@@ -147,11 +155,14 @@ export interface Gasto {
   hora?: string; // HH:mm; opcional para movimientos anteriores. // YYYY-MM-DD
   nota?: string;
   reembolsable?: boolean; // Registros anteriores sin este dato no generan deuda nueva.
+  registeredByUserId?: string;
+  reimbursementStatus?: 'Pendiente' | 'Parcial' | 'Reembolsado' | 'Sin desglose';
 }
 
-export interface Reembolso {
+export interface Reembolso extends OfficeAccess {
   id: string;
   casoId: string;
+  gastoId?: string;
   monto: number;
   fecha: string;
   hora?: string; // HH:mm; opcional para movimientos anteriores.
@@ -210,4 +221,3 @@ export interface UserProfile {
   mustChangePassword?: boolean;
   createdAt: string;
 }
-

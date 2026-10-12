@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   query,
   where,
   CollectionReference,
@@ -14,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { validateTask } from '../services/tasks';
 import { db } from '../services/firebaseConfig';
+import type { OfficeUser } from '../services/internalAuth';
 import { ILegalRepository } from './types';
 import {
   Cliente,
@@ -44,16 +46,18 @@ function sanitizeForFirestore(data: object): Record<string, unknown> {
 
 export class FirestoreLegalRepository implements ILegalRepository {
   private workspaceId: string;
+  private officeUser?: OfficeUser;
 private firestore: Firestore;
-  constructor(workspaceId: string) {
+  constructor(workspaceId: string, firestoreOverride?: Firestore, officeUser?: OfficeUser) {
     if (!workspaceId) {
       throw new Error('FirestoreLegalRepository requiere un workspaceId válido para el aislamiento de datos.');
     }
-    if (!db) {
+    if (!firestoreOverride && !db) {
   throw new Error('Firebase no está configurado. Firestore no está disponible.');
 }
     this.workspaceId = workspaceId;
-    this.firestore = db;
+    this.officeUser = officeUser;
+    this.firestore = firestoreOverride || db!;
   }
 
   // Rutas de colecciones con aislamiento por Workspace
@@ -88,11 +92,21 @@ private get tasksCol(): CollectionReference<DocumentData> {
   return collection(this.firestore, 'workspaces', this.workspaceId, 'tareas');
 }
   // ==========================================
+  private scoped(col: CollectionReference<DocumentData>, cases = false) {
+    if (!this.officeUser || this.officeUser.isOfficeAdmin) return col;
+    if (this.officeUser.role === 'asistente') {
+      return cases
+        ? query(col, where('assignedUserIds', 'array-contains', this.officeUser.id), where('assistantVisible', '==', true))
+        : query(col, where('assignedUserIds', 'array-contains', this.officeUser.id));
+    }
+    return query(col, where('ownerUserId', '==', this.officeUser.id));
+  }
   // CLIENTES
   // ==========================================
 
   async getClients(): Promise<Cliente[]> {
-    const snap = await getDocs(this.clientsCol);
+    if (this.officeUser?.role === 'asistente') return [];
+    const snap = await getDocs(this.scoped(this.clientsCol));
     return snap.docs.map((docSnap) => ({
       id: docSnap.id,
       ...(docSnap.data() as Omit<Cliente, 'id'>),
@@ -116,6 +130,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...clienteData,
       id: docRef.id,
       fechaRegistro: nowStr,
+      ...(this.officeUser ? { ownerUserId: this.officeUser.id } : {}),
     };
     await setDoc(docRef, sanitizeForFirestore(newClient));
     return newClient;
@@ -138,34 +153,34 @@ private get tasksCol(): CollectionReference<DocumentData> {
   }
 
   // ==========================================
+  private financeRef(caseId: string) {
+    return doc(this.firestore, 'workspaces', this.workspaceId, 'caseFinance', caseId);
+  }
+  private async hydrateCase(id: string, data: Omit<Caso, 'id'>): Promise<Caso> {
+    if (!this.officeUser) return { ...data, id };
+    if (this.officeUser.role === 'asistente') return { ...data, id, honorariosAcordados: 0 };
+    const finance = await getDoc(this.financeRef(id));
+    return { ...data, id, honorariosAcordados: finance.exists()
+      ? Number(finance.data().honorariosAcordados || 0)
+      : Number(data.honorariosAcordados || 0) };
+  }
   // CASOS
   // ==========================================
 
   async getCases(): Promise<Caso[]> {
-    const snap = await getDocs(this.casesCol);
-    return snap.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<Caso, 'id'>),
-    }));
+    const snap = await getDocs(this.scoped(this.casesCol, true));
+    return Promise.all(snap.docs.map(item => this.hydrateCase(item.id, item.data() as Omit<Caso, 'id'>)));
   }
 
   async getCaseById(id: string): Promise<Caso | null> {
-    const docRef = doc(this.casesCol, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return {
-      id: snap.id,
-      ...(snap.data() as Omit<Caso, 'id'>),
-    };
+    const snap = await getDoc(doc(this.casesCol, id));
+    return snap.exists() ? this.hydrateCase(snap.id, snap.data() as Omit<Caso, 'id'>) : null;
   }
 
   async getCasesByClientId(clienteId: string): Promise<Caso[]> {
-    const q = query(this.casesCol, where('clienteId', '==', clienteId));
-    const snap = await getDocs(q);
-    return snap.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<Caso, 'id'>),
-    }));
+    if (this.officeUser) return (await this.getCases()).filter(item => item.clienteId === clienteId);
+    const snap = await getDocs(query(this.casesCol, where('clienteId', '==', clienteId)));
+    return snap.docs.map(item => ({ id: item.id, ...(item.data() as Omit<Caso, 'id'>) }));
   }
 
   async addCase(casoData: Omit<Caso, 'id' | 'fechaCreacion'>): Promise<Caso> {
@@ -175,24 +190,34 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...casoData,
       id: docRef.id,
       fechaCreacion: nowStr,
+      ...(this.officeUser ? { ownerUserId: this.officeUser.id, assignedUserIds: casoData.assignedUserIds || [], assistantVisible: true } : {}),
     };
-    await setDoc(docRef, sanitizeForFirestore(newCase));
+    if (this.officeUser) {
+      const { honorariosAcordados, ...publicCase } = newCase;
+      const batch = writeBatch(this.firestore);
+      batch.set(docRef, sanitizeForFirestore(publicCase));
+      batch.set(this.financeRef(docRef.id), { honorariosAcordados, ownerUserId: newCase.ownerUserId });
+      await batch.commit();
+    } else {
+      await setDoc(docRef, sanitizeForFirestore(newCase));
+    }
     return newCase;
   }
 
   async updateCase(id: string, data: Omit<Caso, 'id' | 'fechaCreacion'>): Promise<Caso> {
     const docRef = doc(this.casesCol, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
-      throw new Error(`Caso con id ${id} no encontrado en Firestore`);
+    const current = await this.getCaseById(id);
+    if (!current) throw new Error(`Caso con id ${id} no encontrado en Firestore`);
+    const updated: Caso = { ...current, ...data, id };
+    if (this.officeUser) {
+      const { honorariosAcordados, ...publicCase } = updated;
+      const batch = writeBatch(this.firestore);
+      batch.set(docRef, sanitizeForFirestore(publicCase));
+      batch.set(this.financeRef(id), { honorariosAcordados, ownerUserId: updated.ownerUserId }, { merge: true });
+      await batch.commit();
+    } else {
+      await updateDoc(docRef, sanitizeForFirestore(data as Record<string, unknown>));
     }
-    const current = snap.data() as Omit<Caso, 'id'>;
-    const updated: Caso = {
-      ...current,
-      ...data,
-      id,
-    };
-    await updateDoc(docRef, sanitizeForFirestore(data as Record<string, unknown>));
     return updated;
   }
 
@@ -202,7 +227,10 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
   async getActivities(casoId?: string): Promise<Actividad[]> {
     let snap;
-    if (casoId) {
+    if (this.officeUser && !this.officeUser.isOfficeAdmin) {
+      if (this.officeUser.role === 'asistente') return [];
+      snap = await getDocs(this.scoped(this.activitiesCol));
+    } else if (casoId) {
       const q = query(this.activitiesCol, where('casoId', '==', casoId));
       snap = await getDocs(q);
     } else {
@@ -213,7 +241,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...(docSnap.data() as Omit<Actividad, 'id'>),
     }));
     // Ordenar descendente por fecha y hora
-    return items.sort((a, b) => {
+    return items.filter(item => !casoId || item.casoId === casoId).sort((a, b) => {
       const dtA = `${a.fecha}T${a.hora || '00:00'}`;
       const dtB = `${b.fecha}T${b.hora || '00:00'}`;
       return dtB.localeCompare(dtA);
@@ -224,6 +252,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
     const docRef = doc(this.activitiesCol);
     const newActivity: Actividad = {
       ...actividadData,
+      ...(this.officeUser ? { ownerUserId: (await this.getCaseById(actividadData.casoId))?.ownerUserId || this.officeUser.id } : {}),
       id: docRef.id,
     };
     await setDoc(docRef, sanitizeForFirestore(newActivity));
@@ -236,7 +265,9 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
   async getEvents(casoId?: string): Promise<Evento[]> {
     let snap;
-    if (casoId) {
+    if (this.officeUser && !this.officeUser.isOfficeAdmin) {
+      snap = await getDocs(this.scoped(this.eventsCol));
+    } else if (casoId) {
       const q = query(this.eventsCol, where('casoId', '==', casoId));
       snap = await getDocs(q);
     } else {
@@ -247,7 +278,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       ...(docSnap.data() as Omit<Evento, 'id'>),
     }));
     // Ordenar ascendente por fecha y hora
-    return items.sort((a, b) => {
+    return items.filter(item => !casoId || item.casoId === casoId).sort((a, b) => {
       const dtA = `${a.fecha}T${a.hora || '00:00'}`;
       const dtB = `${b.fecha}T${b.hora || '00:00'}`;
       return dtA.localeCompare(dtB);
@@ -258,6 +289,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
     const docRef = doc(this.eventsCol);
     const newEvent: Evento = {
       ...eventoData,
+      ...(this.officeUser ? { ownerUserId: (await this.getCaseById(eventoData.casoId))?.ownerUserId || this.officeUser.id, assignedUserIds: eventoData.assignedUserIds || [] } : {}),
       id: docRef.id,
     };
     await setDoc(docRef, sanitizeForFirestore(newEvent));
@@ -316,7 +348,10 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
   async getPayments(casoId?: string): Promise<Pago[]> {
     let snap;
-    if (casoId) {
+    if (this.officeUser && !this.officeUser.isOfficeAdmin) {
+      if (this.officeUser.role === 'asistente') return [];
+      snap = await getDocs(this.scoped(this.paymentsCol));
+    } else if (casoId) {
       const q = query(this.paymentsCol, where('casoId', '==', casoId));
       snap = await getDocs(q);
     } else {
@@ -332,6 +367,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
     const docRef = doc(this.paymentsCol);
     const newPayment: Pago = {
       ...pagoData,
+      ...(this.officeUser ? { ownerUserId: (await this.getCaseById(pagoData.casoId))?.ownerUserId || this.officeUser.id } : {}),
       id: docRef.id,
     };
     await setDoc(docRef, sanitizeForFirestore(newPayment));
@@ -345,6 +381,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       throw new Error(`Pago con id ${id} no encontrado en Firestore`);
     }
     const updated: Pago = {
+      ...(snap.data() as Pago),
       ...pagoData,
       id,
     };
@@ -363,7 +400,10 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
   async getExpenses(casoId?: string): Promise<Gasto[]> {
     let snap;
-    if (casoId) {
+    if (this.officeUser && !this.officeUser.isOfficeAdmin) {
+      if (this.officeUser.role === 'asistente') return [];
+      snap = await getDocs(this.scoped(this.expensesCol));
+    } else if (casoId) {
       const q = query(this.expensesCol, where('casoId', '==', casoId));
       snap = await getDocs(q);
     } else {
@@ -379,6 +419,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
     const docRef = doc(this.expensesCol);
     const newExpense: Gasto = {
       ...gastoData,
+      ...(this.officeUser ? { ownerUserId: (await this.getCaseById(gastoData.casoId))?.ownerUserId || this.officeUser.id, registeredByUserId: this.officeUser.id } : {}),
       id: docRef.id,
     };
     await setDoc(docRef, sanitizeForFirestore(newExpense));
@@ -392,6 +433,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       throw new Error(`Gasto con id ${id} no encontrado en Firestore`);
     }
     const updated: Gasto = {
+      ...(snap.data() as Gasto),
       ...gastoData,
       id,
     };
@@ -410,7 +452,10 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
   async getReimbursements(casoId?: string): Promise<Reembolso[]> {
     let snap;
-    if (casoId) {
+    if (this.officeUser && !this.officeUser.isOfficeAdmin) {
+      if (this.officeUser.role === 'asistente') return [];
+      snap = await getDocs(this.scoped(this.reimbursementsCol));
+    } else if (casoId) {
       const q = query(this.reimbursementsCol, where('casoId', '==', casoId));
       snap = await getDocs(q);
     } else {
@@ -426,6 +471,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
     const docRef = doc(this.reimbursementsCol);
     const newReimbursement: Reembolso = {
       ...reembolsoData,
+      ...(this.officeUser ? { ownerUserId: (await this.getCaseById(reembolsoData.casoId))?.ownerUserId || this.officeUser.id } : {}),
       id: docRef.id,
     };
     await setDoc(docRef, sanitizeForFirestore(newReimbursement));
@@ -439,6 +485,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
       throw new Error(`Reembolso con id ${id} no encontrado en Firestore`);
     }
     const updated: Reembolso = {
+      ...(snap.data() as Reembolso),
       ...reembolsoData,
       id,
     };
@@ -457,7 +504,9 @@ private get tasksCol(): CollectionReference<DocumentData> {
   async getTasks(casoId?: string): Promise<Tarea[]> {
     let snap;
 
-    if (casoId) {
+    if (this.officeUser && !this.officeUser.isOfficeAdmin) {
+      snap = await getDocs(this.scoped(this.tasksCol));
+    } else if (casoId) {
       const q = query(this.tasksCol, where('casoId', '==', casoId));
       snap = await getDocs(q);
     } else {
@@ -469,6 +518,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
         id: docSnap.id,
         ...(docSnap.data() as Omit<Tarea, 'id'>),
       }))
+      .filter(item => !casoId || item.casoId === casoId)
       .sort((a, b) => {
         const fechaA = a.fechaLimite || '';
         const fechaB = b.fechaLimite || '';
@@ -483,6 +533,7 @@ private get tasksCol(): CollectionReference<DocumentData> {
 
   const newTask: Tarea = {
     ...data,
+    ...(this.officeUser ? { ownerUserId: (await this.getCaseById(data.casoId))?.ownerUserId || this.officeUser.id, assignedUserIds: data.assignedUserIds || [] } : {}),
     id: docRef.id,
     estado: 'Pendiente',
     createdAt: stamp,

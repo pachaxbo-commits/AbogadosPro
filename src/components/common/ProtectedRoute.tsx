@@ -1,6 +1,8 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useOffice } from '../../context/OfficeContext';
+import { officeAuthEnabled } from '../../services/internalAuth';
 import { ChangePasswordModal } from '../auth/ChangePasswordModal';
 import { Scale } from 'lucide-react';
 
@@ -15,6 +17,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const { currentUser, userProfile, isDemo, loading } = useAuth();
   const location = useLocation();
+  const { user: officeUser } = useOffice();
 
   if (loading) {
     return (
@@ -34,6 +37,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if ((officeAuthEnabled || isDemo) && location.pathname === '/usuarios-estudio' && !officeUser?.isOfficeAdmin) return <Navigate to="/" replace />;
+  if ((officeAuthEnabled || isDemo) && officeUser?.role === 'asistente' && (['/finanzas', '/configuracion', '/importar-datos'].includes(location.pathname) || location.pathname.startsWith('/clientes'))) {
+    return <Navigate to="/" replace />;
+  }
   // Si se requiere rol de administrador y el usuario no lo es (o está en demo)
   if (requireAdmin) {
     if (isDemo || userProfile?.role !== 'admin') {

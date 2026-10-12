@@ -13,7 +13,9 @@ interface Props {
 }
 
 export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onClose, onSuccess }) => {
-  const { getCaseWithDetails, addReimbursement, updateReimbursement } = useLegalData();
+  const { getCaseWithDetails, expenses, reimbursements, addReimbursement, updateReimbursement } = useLegalData();
+  const eligibleExpenses = expenses.filter(item => item.casoId === casoId && item.reembolsable);
+  const [gastoId, setGastoId] = useState(reembolso?.gastoId || '');
   const [monto, setMonto] = useState(reembolso ? String(reembolso.monto) : '');
   const [fecha, setFecha] = useState(() => reembolso?.fecha ?? getLocalTodayIsoString());
   const [hora, setHora] = useState(() => reembolso ? reembolso.hora || '' : currentFinanceTime());
@@ -21,7 +23,10 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const available = (getCaseWithDetails(casoId)?.gastosPendientes ?? 0) + (reembolso?.monto ?? 0);
+  const caseAvailable = (getCaseWithDetails(casoId)?.gastosPendientes ?? 0) + (reembolso?.monto ?? 0);
+  const selectedExpense = eligibleExpenses.find(item => item.id === gastoId);
+  const linkedAlready = reimbursements.filter(item => item.gastoId === gastoId && item.id !== reembolso?.id).reduce((sum, item) => sum + item.monto, 0);
+  const available = selectedExpense ? Math.min(caseAvailable, selectedExpense.monto - linkedAlready) : caseAvailable;
   const amount = Number(monto);
   const preview = monto.trim() && Number.isFinite(amount) && amount > 0 && amount <= available
     ? Math.round((available - amount) * 100) / 100 : undefined;
@@ -33,7 +38,7 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
       setError('Ingresa un monto mayor a Bs 0.');
       return;
     }
-    const currentAvailable = (getCaseWithDetails(casoId)?.gastosPendientes ?? 0) + (reembolso?.monto ?? 0);
+    const currentAvailable = available;
     if (amount > currentAvailable) {
       setError(`El monto no puede superar los gastos pendientes de ${formatBs(currentAvailable)}.`);
       return;
@@ -47,7 +52,7 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
     setSaving(true);
     setError('');
     try {
-      const data = { casoId, monto: amount, fecha, hora: hora || undefined, nota: nota.trim() || undefined };
+      const data = { casoId, gastoId: gastoId || undefined, monto: amount, fecha, hora: hora || undefined, nota: nota.trim() || undefined };
       if (reembolso) await updateReimbursement(reembolso.id, data);
       else await addReimbursement(data);
       onSuccess();
@@ -70,6 +75,7 @@ export const ReimbursementFormModal: React.FC<Props> = ({ casoId, reembolso, onC
           <span>Gastos pendientes de reembolso:</span>
           <strong className="font-mono text-sm whitespace-nowrap">{formatBs(getCaseWithDetails(casoId)?.gastosPendientes ?? 0)}</strong>
         </div>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Gasto relacionado (opcional)<select value={gastoId} onChange={event => setGastoId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Reembolso general del caso</option>{eligibleExpenses.map(item => <option key={item.id} value={item.id}>{item.concepto} · {formatBs(item.monto)}</option>)}</select></label>
         <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
           Monto recibido (Bs) *
           <input type="number" min="0" step="any" value={monto} onChange={(event) => { setMonto(event.target.value); setError(''); }}

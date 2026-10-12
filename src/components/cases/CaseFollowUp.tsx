@@ -7,7 +7,7 @@ import { formatFecha } from '../../services/formatters';
 import { taskToday } from '../../services/tasks';
 import type { Caso } from '../../types';
 
-export function CaseFollowUp({ caso }: { caso: Caso }) {
+export function CaseFollowUp({ caso, canRegister = true }: { caso: Caso; canRegister?: boolean }) {
   const { activities, documents, tasks, events } = useLegalData();
   const now = useTaskClock();
   const review = caseFollowUp(caso, activities, documents, tasks, events, now);
@@ -25,7 +25,7 @@ export function CaseFollowUp({ caso }: { caso: Caso }) {
         <div><dt className="text-slate-500">Próxima revisión</dt><dd className="font-medium text-slate-800">{review.state === 'concluido' || !review.nextReview ? '—' : formatFecha(review.nextReview)}</dd></div>
       </dl>
       {review.state === 'requiere' && <p className="mt-2 text-xs font-semibold text-amber-800">{review.overdueDays} {review.overdueDays === 1 ? 'día' : 'días'} de retraso</p>}
-      <button type="button" onClick={() => setOpen(true)} className="mt-3 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-900 hover:bg-brand-50">Registrar seguimiento</button>
+      {canRegister && <button type="button" onClick={() => setOpen(true)} className="mt-3 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-900 hover:bg-brand-50">Registrar seguimiento</button>}
     </div>
     {open && <FollowUpRegistrationModal casoId={caso.id} onClose={() => setOpen(false)} />}
   </>;

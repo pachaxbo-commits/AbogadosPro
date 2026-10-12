@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, MessageCircle, Pencil, Share2, Sun, Moon } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
+import { useOffice } from '../context/OfficeContext';
+import { useAuth } from '../context/AuthContext';
 import type { ProfileData } from '../types/profile';
 import { PROFILE_FIELDS, profileText, validateProfilePhoto } from '../services/profile';
 import { whatsappShareUrl } from '../services/whatsapp';
@@ -21,7 +23,9 @@ function ProfileCard({ profile, photoUrl }: { profile: ProfileData; photoUrl: st
 
 function ProfileEditor({ onClose }: { onClose: () => void }) {
   const { profile, photoUrl, save } = useProfile();
-  const [draft, setDraft] = useState<ProfileData>(() => Object.fromEntries(PROFILE_FIELDS.map(([key]) => [key, profile?.[key] || ''])) as unknown as ProfileData);
+  const { user: officeUser } = useOffice();
+  const { isDemo } = useAuth();
+  const [draft, setDraft] = useState<ProfileData>(() => Object.fromEntries(PROFILE_FIELDS.map(([key]) => [key, profile?.[key] || (key === 'nombre' ? officeUser?.displayName || '' : '')])) as unknown as ProfileData);
   const [photo, setPhoto] = useState<File>();
   const [preview, setPreview] = useState<string>();
   const previewRef = useRef<string | undefined>(undefined);
@@ -57,7 +61,7 @@ function ProfileEditor({ onClose }: { onClose: () => void }) {
         } catch (err) { if (current === selection.current) setError(err instanceof Error ? err.message : 'No se pudo cargar la imagen.'); }
         finally { if (current === selection.current) setCheckingPhoto(false); }
       }} />
-      <p className="mt-2 text-xs text-slate-500">JPG o PNG, máximo 2 MB. La foto dura esta sesión; al recargar se mostrarán tus iniciales.</p>
+      <p className="mt-2 text-xs text-slate-500">{isDemo ? 'JPG o PNG, máximo 2 MB. La foto se conserva en este navegador para Demo.' : 'JPG o PNG, máximo 2 MB. La foto dura esta sesión; al recargar se mostrarán tus iniciales.'}</p>
       {checkingPhoto && <p role="status" className="mt-1 text-xs text-slate-500">Validando imagen…</p>}
     </div></div>
     {[

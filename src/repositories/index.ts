@@ -7,13 +7,14 @@ import { demoLegalRepository } from './demoRepo';
 import { LocalDocumentRepository, type DocumentRepository } from './documentsRepository';
 import { LocalProfileRepository, type ProfileRepository } from './profileRepository';
 import { TemporaryDocumentFiles } from '../services/documentFiles';
+import { DemoProfileFiles } from '../services/demoProfileFiles';
 
 export const legalRepository = demoLegalRepository;
 
 const temporaryFiles = new TemporaryDocumentFiles();
 
 export const profileRepository: ProfileRepository =
-  new LocalProfileRepository(temporaryFiles);
+  new LocalProfileRepository(new DemoProfileFiles(temporaryFiles));
 
 export const documentRepository: DocumentRepository =
   new LocalDocumentRepository(

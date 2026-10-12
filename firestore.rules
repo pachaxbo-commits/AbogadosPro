@@ -1,84 +1,151 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Funciones auxiliares de autenticación y autorización
-    function isAuthenticated() {
-      return request.auth != null;
+    function authenticated() { return request.auth != null; }
+    function owner(uid) { return authenticated() && request.auth.uid == uid; }
+    function userPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function userData() { return get(userPath()).data; }
+    function admin() {
+      return authenticated() && (request.auth.token.get('role', '') == 'admin' ||
+        (exists(userPath()) && userData().get('role', 'user') == 'admin'));
     }
-
-    function isOwner(uid) {
-      return isAuthenticated() && request.auth.uid == uid;
+    function workspacePath(workspaceId) { return /databases/$(database)/documents/workspaces/$(workspaceId); }
+    function officePath(workspaceId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/internalUsers/$(request.auth.uid); }
+function casePath(workspaceId, caseId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/casos/$(caseId); }
+    function legacyWorkspace(workspaceId) {
+      return authenticated() && exists(workspacePath(workspaceId)) &&
+        get(workspacePath(workspaceId)).data.get('internalAuthEnabled', false) != true &&
+        exists(userPath()) && userData().get('workspaceId', '') == workspaceId;
     }
-
-    function getUserDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function officeMember(workspaceId) {
+      return authenticated() &&
+        request.auth.token.workspaceId == workspaceId &&
+        request.auth.token.internalUserId == request.auth.uid &&
+        exists(officePath(workspaceId)) &&
+        get(officePath(workspaceId)).data.get('active', false) == true &&
+        get(officePath(workspaceId)).data.get('sessionVersion', 0) == request.auth.token.sessionVersion;
     }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'admin' ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         getUserDoc().get('role', 'user') == 'admin')
-      );
+    function officeRole(workspaceId) { return get(officePath(workspaceId)).data.get('role', 'asistente'); }
+    function officeAdmin(workspaceId) { return officeMember(workspaceId) && get(officePath(workspaceId)).data.get('isOfficeAdmin', false) == true; }
+    function lawyer(workspaceId) { return officeMember(workspaceId) && officeRole(workspaceId) == 'abogado'; }
+    function assistant(workspaceId) { return officeMember(workspaceId) && officeRole(workspaceId) == 'asistente'; }
+    function recordOwner() { return resource.data.get('ownerUserId', '') == request.auth.uid; }
+    function recordAssigned() { return request.auth.uid in resource.data.get('assignedUserIds', []); }
+    function safeCaseData() {
+      return request.resource.data.get('assistantVisible', false) != true ||
+        !request.resource.data.keys().hasAny(['honorariosAcordados']);
     }
-
-    function isInWorkspace(workspaceId) {
-      return isAuthenticated() && (
-        isAdmin() ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         getUserDoc().get('workspaceId', '') == workspaceId)
-      );
+    function canSeeCase(workspaceId) {
+      return admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+        (lawyer(workspaceId) && recordOwner()) || (assistant(workspaceId) && recordAssigned() && resource.data.get('assistantVisible', false) == true);
     }
-
-    // ==========================================
-    // Colección: users
-    // ==========================================
+    function canSeeWork(workspaceId) {
+      return admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+        (lawyer(workspaceId) && recordOwner()) || (assistant(workspaceId) && recordAssigned());
+    }
+    function canSeeFinance(workspaceId) {
+      return admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+        (lawyer(workspaceId) && recordOwner());
+    }
+    function canCreateOwn(workspaceId) {
+      return admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+        (lawyer(workspaceId) && request.resource.data.get('ownerUserId', '') == request.auth.uid);
+    }
+    function sameOwnership() {
+      return request.resource.data.get('ownerUserId', '') == resource.data.get('ownerUserId', '');
+    }
     match /users/{userId} {
-      // Lectura permitida si el usuario es el dueño o es un administrador
-      allow read: if isOwner(userId) || isAdmin();
-
-      // Creación: permitida al auto-registrarse (rol: user, tipo: free, billingExempt: false) o por admin
-      allow create: if isAdmin() || (
-        isOwner(userId) &&
+      allow read: if owner(userId) || admin();
+      allow create: if admin() || (owner(userId) && !request.auth.token.keys().hasAny(['internalUserId']) &&
         request.resource.data.get('role', 'user') == 'user' &&
         request.resource.data.get('accountType', 'free') == 'free' &&
         request.resource.data.get('billingExempt', false) == false &&
-        request.resource.data.get('workspaceId', userId) == userId
-      );
-
-      // Modificación: un usuario NO puede auto-ascender a admin ni cambiar su plan/billingExempt/workspaceId
-      allow update: if isAdmin() || (
-        isOwner(userId) &&
+        request.resource.data.get('workspaceId', userId) == userId);
+      allow update: if admin() || (owner(userId) &&
         request.resource.data.get('role', 'user') == resource.data.get('role', 'user') &&
         request.resource.data.get('accountType', 'free') == resource.data.get('accountType', 'free') &&
         request.resource.data.get('plan', 'free') == resource.data.get('plan', 'free') &&
         request.resource.data.get('billingExempt', false) == resource.data.get('billingExempt', false) &&
-        request.resource.data.get('workspaceId', userId) == resource.data.get('workspaceId', userId)
-      );
-
-      // Eliminación reservada exclusivamente para administradores
-      allow delete: if isAdmin();
+        request.resource.data.get('workspaceId', userId) == resource.data.get('workspaceId', userId));
+      allow delete: if admin();
     }
-
-    // ==========================================
-    // Colección: workspaces y sus subcolecciones
-    // ==========================================
     match /workspaces/{workspaceId} {
-      // El abogado titular o el administrador pueden leer y gestionar el workspace
-      allow read: if isInWorkspace(workspaceId);
-      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == workspaceId);
-      allow update, delete: if isAdmin() || isInWorkspace(workspaceId);
-
-      // Subcolecciones aisladas de causas jurídicas (clientes, casos, eventos, pagos, etc.)
+      allow read: if admin() || legacyWorkspace(workspaceId) || officeMember(workspaceId) ||
+        (authenticated() && resource.data.get('ownerUid', '') == request.auth.uid);
+      allow create: if authenticated() && (admin() || (request.auth.uid == workspaceId && !request.auth.token.keys().hasAny(['internalUserId'])));
+      allow update, delete: if admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId);
+      match /internalUsers/{internalUserId} {
+        allow read, write: if false; // Solo Firebase Admin SDK, mediante /api/internal.
+      }
+      match /casos/{caseId} {
+        allow read: if canSeeCase(workspaceId);
+        allow create: if canCreateOwn(workspaceId) && safeCaseData();
+        allow update: if canSeeCase(workspaceId) && !assistant(workspaceId) && sameOwnership() && safeCaseData();
+        allow delete: if canSeeCase(workspaceId) && !assistant(workspaceId);
+      }
+      match /caseFinance/{caseId} {
+        allow read: if canSeeFinance(workspaceId);
+        allow create: if canCreateOwn(workspaceId);
+        allow update, delete: if canSeeFinance(workspaceId) && sameOwnership();
+      }
+      match /tareas/{taskId} {
+        allow read: if canSeeWork(workspaceId);
+        allow create: if canCreateOwn(workspaceId);
+        allow update: if canSeeWork(workspaceId) && sameOwnership() &&
+          (!assistant(workspaceId) || (
+            request.resource.data.get('assignedUserIds', []) == resource.data.get('assignedUserIds', []) &&
+            request.resource.data.get('casoId', '') == resource.data.get('casoId', '')));
+        allow delete: if canSeeWork(workspaceId) && !assistant(workspaceId);
+      }
+      match /eventos/{eventId} {
+        allow read: if canSeeWork(workspaceId);
+        allow create: if canCreateOwn(workspaceId);
+        allow update: if canSeeWork(workspaceId) && sameOwnership() &&
+          (!assistant(workspaceId) || (
+            request.resource.data.get('assignedUserIds', []) == resource.data.get('assignedUserIds', []) &&
+            request.resource.data.get('casoId', '') == resource.data.get('casoId', '')));
+        allow delete: if canSeeWork(workspaceId) && !assistant(workspaceId);
+      }
+      match /clientes/{clientId} {
+        allow read: if admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+          (lawyer(workspaceId) && recordOwner());
+        allow create: if canCreateOwn(workspaceId);
+        allow update: if (admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+          (lawyer(workspaceId) && recordOwner())) && sameOwnership();
+        allow delete: if admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+          (lawyer(workspaceId) && recordOwner());
+      }
+      match /actividades/{activityId} {
+        allow read: if admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+          (lawyer(workspaceId) && recordOwner());
+        allow create: if canCreateOwn(workspaceId);
+        allow update, delete: if admin() || legacyWorkspace(workspaceId) || officeAdmin(workspaceId) ||
+          (lawyer(workspaceId) && recordOwner());
+      }
+      match /pagos/{paymentId} {
+        allow read: if canSeeFinance(workspaceId);
+        allow create: if canCreateOwn(workspaceId);
+        allow update, delete: if canSeeFinance(workspaceId) && sameOwnership();
+      }
+      match /gastos/{expenseId} {
+        allow read: if canSeeFinance(workspaceId);
+        allow create: if canCreateOwn(workspaceId) ||
+          (assistant(workspaceId) && get(officePath(workspaceId)).data.get('canRegisterExpenses', false) == true &&
+            request.resource.data.get('casoId', '') is string &&
+            exists(casePath(workspaceId, request.resource.data.casoId)) &&
+            request.auth.uid in get(casePath(workspaceId, request.resource.data.casoId)).data.get('assignedUserIds', []) &&
+            request.resource.data.get('ownerUserId', '') == get(casePath(workspaceId, request.resource.data.casoId)).data.get('ownerUserId', ''));
+        allow update, delete: if canSeeFinance(workspaceId) && sameOwnership();
+      }
+      match /reembolsos/{reimbursementId} {
+        allow read: if canSeeFinance(workspaceId);
+        allow create: if canCreateOwn(workspaceId);
+        allow update, delete: if canSeeFinance(workspaceId) && sameOwnership();
+      }
       match /{document=**} {
-        allow read, write: if isInWorkspace(workspaceId);
+        allow read, write: if admin() || legacyWorkspace(workspaceId);
       }
     }
-
-    // Denegar cualquier otra colección no definida explícitamente
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /{document=**} { allow read, write: if false; }
   }
 }

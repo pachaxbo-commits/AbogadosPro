@@ -9,7 +9,7 @@ import { formatFecha } from '../../services/formatters';
 import type { DocumentoCaso } from '../../types';
 
 const button = 'min-h-11 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-brand-900 hover:bg-brand-50 disabled:opacity-50';
-function DocumentRow({ item, onEdit, onDelete }: { item: DocumentoCaso; onEdit: () => void; onDelete: () => void }) {
+function DocumentRow({ item, onEdit, onDelete, readOnly = false }: { item: DocumentoCaso; onEdit: () => void; onDelete: () => void; readOnly?: boolean }) {
   const { getDocumentUrl } = useLegalData();
   const [url, setUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -40,8 +40,8 @@ function DocumentRow({ item, onEdit, onDelete }: { item: DocumentoCaso; onEdit: 
       {!url && <p className="text-sm text-slate-600">{loaded ? 'Archivo no disponible temporalmente.' : 'Comprobando archivo…'}</p>}
       <button type="button" disabled={!url} className={button} onClick={() => { setActions(false); setPreview(true); }}>Abrir / Ver</button>
       {url ? <a className={`${button} text-center`} href={url} download={item.nombreArchivo} onClick={() => setActions(false)}>Descargar</a> : <button disabled className={button}>Descargar</button>}
-      <button type="button" className={button} onClick={() => { setActions(false); onEdit(); }}>Editar información</button>
-      <button type="button" className={`${button} text-rose-700`} onClick={() => { setActions(false); onDelete(); }}>Eliminar</button>
+      {!readOnly && <button type="button" className={button} onClick={() => { setActions(false); onEdit(); }}>Editar información</button>}
+      {!readOnly && <button type="button" className={`${button} text-rose-700`} onClick={() => { setActions(false); onDelete(); }}>Eliminar</button>}
     </div></Modal>}
     {preview && url && <Modal isOpen title={item.nombre} onClose={() => setPreview(false)} maxWidth="2xl">
       {kind === 'image' ? <img src={url} alt={item.nombre} className="mx-auto max-h-[60vh] max-w-full object-contain" /> : kind === 'pdf' ? <iframe src={url} title={item.nombre} className="h-[60vh] w-full rounded border border-slate-200" /> : <p className="text-sm text-slate-600">Descarga el archivo para abrirlo con Word, Excel u otra aplicación compatible.</p>}
@@ -50,7 +50,7 @@ function DocumentRow({ item, onEdit, onDelete }: { item: DocumentoCaso; onEdit: 
   </article>;
 }
 
-export function CaseDocuments({ casoId }: { casoId: string }) {
+export function CaseDocuments({ casoId, readOnly = false }: { casoId: string; readOnly?: boolean }) {
   const { documents, documentsError, deleteDocument, loading } = useLegalData();
   const { configuration } = useProfile();
   const [search, setSearch] = useState('');
@@ -79,13 +79,13 @@ export function CaseDocuments({ casoId }: { casoId: string }) {
     finally { busyRef.current = false; setBusy(false); }
   };
   return <section className="space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Documentos del caso</h2><p className="mt-1 text-xs text-slate-500">Archivos, escritos, pruebas y documentación vinculada al expediente.</p></div><button type="button" disabled={loading || !!documentsError} onClick={() => { setMessage(''); setForm('new'); }} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50"><Plus className="h-4 w-4" />Subir documento</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Documentos del caso</h2><p className="mt-1 text-xs text-slate-500">Archivos, escritos, pruebas y documentación vinculada al expediente.</p></div>{!readOnly && <button type="button" disabled={loading || !!documentsError} onClick={() => { setMessage(''); setForm('new'); }} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50"><Plus className="h-4 w-4" />Subir documento</button>}</div>
     {message && <p role="status" className="rounded-md bg-brand-50 p-3 text-sm text-brand-900">{message}</p>}
-    {documentsError ? <p role="alert" className="text-sm text-rose-800">{documentsError}</p> : loading ? <p>Cargando documentos…</p> : all.length === 0 ? <div className="rounded-lg border border-slate-200 bg-white p-8 text-center"><FolderOpen className="mx-auto mb-3 h-8 w-8 text-slate-400" /><p className="font-semibold text-slate-800">Este caso todavía no tiene documentos.</p><p className="mt-2 text-sm text-slate-500">Los documentos, escritos y pruebas vinculados al expediente aparecerán aquí.</p><button type="button" onClick={() => setForm('new')} className={`${button} mt-4`}>+ Subir primer documento</button></div> : <>
+    {documentsError ? <p role="alert" className="text-sm text-rose-800">{documentsError}</p> : loading ? <p>Cargando documentos…</p> : all.length === 0 ? <div className="rounded-lg border border-slate-200 bg-white p-8 text-center"><FolderOpen className="mx-auto mb-3 h-8 w-8 text-slate-400" /><p className="font-semibold text-slate-800">Este caso todavía no tiene documentos.</p><p className="mt-2 text-sm text-slate-500">Los documentos, escritos y pruebas vinculados al expediente aparecerán aquí.</p>{!readOnly && <button type="button" onClick={() => setForm('new')} className={`${button} mt-4`}>+ Subir primer documento</button>}</div> : <>
       <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="flex flex-wrap gap-3"><input aria-label="Buscar documentos" placeholder="Buscar documentos..." value={search} onChange={(e) => setSearch(e.target.value)} className="min-h-11 min-w-0 flex-[2_1_200px] rounded-md border border-slate-200 px-3 text-sm" /><select aria-label="Categoría de documentos" value={selectedCategory} onChange={(e) => setCategory(e.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm"><option value="">Todos ({all.length})</option>{categories.map((value) => <option key={value} value={value}>{value} ({categoryCounts.get(value)})</option>)}</select><select aria-label="Orden de documentos" value={order} onChange={(e) => setOrder(e.target.value)} className="min-h-11 rounded-md border border-slate-200 bg-white px-2 text-sm"><option value="recent">Más recientes</option><option value="old">Más antiguos</option><option value="name">Nombre A-Z</option><option value="name-desc">Nombre Z-A</option></select></div><p role="status" className="mt-2 text-xs text-slate-600">{selectedCategory || 'Todos'} · {visible.length} {visible.length === 1 ? 'documento' : 'documentos'}{term ? ` encontrados para «${search.trim()}»` : ''}</p></div>
       {visible.length === 0 && <p className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">No hay documentos que coincidan con la búsqueda y la categoría.</p>}
       <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1" aria-label="Lista de documentos">
-        {visible.map((item) => <DocumentRow key={item.id} item={item} onEdit={() => setForm(item)} onDelete={() => { setError(''); setDeleting(item); }} />)}
+        {visible.map((item) => <DocumentRow key={item.id} item={item} readOnly={readOnly} onEdit={() => setForm(item)} onDelete={() => { setError(''); setDeleting(item); }} />)}
       </div>
     </>}
     {form && <DocumentFormModal casoId={casoId} document={form === 'new' ? undefined : form} onClose={() => setForm(null)} onSuccess={(count) => setMessage(form === 'new' ? count > 1 ? `${count} documentos guardados correctamente.` : 'Documento guardado correctamente.' : 'Documento actualizado correctamente.')} />}

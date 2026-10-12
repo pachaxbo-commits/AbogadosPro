@@ -22,7 +22,7 @@ export function validateTask(data: DatosTarea, caseIds: readonly string[]): Dato
   if (!validTaskDate(data.fechaLimite)) throw new Error('Ingresa una fecha límite válida.');
   if (data.horaLimite && !/^([01]\d|2[0-3]):[0-5]\d$/.test(data.horaLimite)) throw new Error('Ingresa una hora válida.');
   if (!['Alta', 'Media', 'Normal'].includes(data.prioridad)) throw new Error('Selecciona una prioridad válida.');
-  return { casoId: data.casoId, encargadoId: data.encargadoId || '', titulo: data.titulo.trim(), fechaLimite: data.fechaLimite, prioridad: data.prioridad, descripcion: data.descripcion?.trim() || undefined, horaLimite: data.horaLimite || undefined };
+  return { casoId: data.casoId, assignedUserIds: data.assignedUserIds, sharedWithUserIds: data.sharedWithUserIds, titulo: data.titulo.trim(), fechaLimite: data.fechaLimite, prioridad: data.prioridad, descripcion: data.descripcion?.trim() || undefined, horaLimite: data.horaLimite || undefined };
 }
 
 export function readStoredTask(value: unknown): Tarea {

@@ -19,6 +19,7 @@ import {
 
 import { useLegalData } from '../../context/LegalDataContext';
 import { useAuth } from '../../context/AuthContext';
+import { useOffice } from '../../context/OfficeContext';
 import { TaskNotifications } from '../tasks/TaskNotifications';
 import { ProfileMenu } from '../profile/ProfileMenu';
 
@@ -29,6 +30,7 @@ export const Navbar: React.FC = () => {
 
   const { resetDemoData } = useLegalData();
   const { currentUser, userProfile, isDemo, logout, exitDemoMode } = useAuth();
+  const { user: officeUser } = useOffice();
 
   const handleReset = async () => {
     if (window.confirm('¿Deseas restablecer los datos del demo al estado original?')) {
@@ -61,11 +63,11 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { to: '/', label: 'Inicio', icon: LayoutDashboard },
-    { to: '/clientes', label: 'Clientes', icon: Users },
+    ...(officeUser?.role === 'asistente' ? [] : [{ to: '/clientes', label: 'Clientes', icon: Users }]),
     { to: '/casos', label: 'Casos', icon: Briefcase },
     { to: '/agenda', label: 'Agenda', icon: Calendar },
     { to: '/tareas', label: 'Tareas', icon: ListTodo },
-    { to: '/finanzas', label: 'Finanzas', icon: Wallet },
+    ...(officeUser?.role === 'asistente' ? [] : [{ to: '/finanzas', label: 'Finanzas', icon: Wallet }]),
   ];
 
   return (
@@ -75,7 +77,7 @@ export const Navbar: React.FC = () => {
           <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <Sparkles className="w-3.5 h-3.5 shrink-0" />
-              <span className="sm:hidden">Modo demo · datos ficticios</span>
+              <span className="sm:hidden">Modo demo · {officeUser?.displayName || 'perfil'}</span>
               <span className="hidden sm:inline">
                 <strong>Modo Demostración Activo:</strong>{' '}
                 Datos ficticios en memoria local. Ninguna acción afecta la base
@@ -118,7 +120,7 @@ export const Navbar: React.FC = () => {
 
             {isDemo ? (
               <span className="hidden md:inline-flex items-center ml-2 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-400/20 text-amber-200 border border-amber-400/40">
-                Demo Bolivia
+                Demo Bolivia · {officeUser?.displayName} ({officeUser?.isOfficeAdmin ? 'Admin' : officeUser?.role})
               </span>
             ) : userProfile?.role === 'admin' ? (
               <span className="hidden md:inline-flex items-center ml-2 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/20 text-purple-200 border border-purple-400/30">

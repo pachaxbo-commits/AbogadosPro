@@ -83,6 +83,7 @@ const requireFirebase = () => {
   // Carga o auto-creación del perfil en Firestore
   const fetchOrCreateProfile = useCallback(async (user: User): Promise<UserProfile> => {
     const { db: firestore } = requireFirebase();
+    if ((await user.getIdTokenResult()).claims.internalUserId) throw new Error('Los perfiles internos deben entrar desde la cuenta del estudio.');
     const userDocRef = doc(firestore, 'users', user.uid);
     const userDocSnap = await getDoc(userDocRef);
 
@@ -156,6 +157,7 @@ const firebaseAuth = auth;
         } catch (err) {
           console.error('Error al obtener perfil de usuario:', err);
           setError('No fue posible cargar el perfil del usuario.');
+          if ((await firebaseUser.getIdTokenResult().catch(() => null))?.claims.internalUserId) await signOut(firebaseAuth);
         }
       } else {
         setCurrentUser(null);

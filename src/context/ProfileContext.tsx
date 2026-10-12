@@ -5,6 +5,7 @@ import { configurationRepository, type AppConfiguration, type CategoryGroup } fr
 import { assigneesRepository } from '../repositories/assigneesRepository';
 import type { Assignee, AssigneeInput } from '../types/assignee';
 import { useAuth } from './AuthContext';
+import { useOffice } from './OfficeContext';
 import type { ProfessionalProfile, ProfileData } from '../types/profile';
 import { profileRepository } from '../repositories';
 
@@ -31,11 +32,15 @@ interface ProfileContextValue {
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 export function ProfileProvider({ children, userId = DEMO_PROFILE_USER }: { children: ReactNode; userId?: string }) {
   const { currentUser, userProfile } = useAuth();
+  const { user: officeUser } = useOffice();
+  const profileUserId = officeUser?.id || userId;
   const workspaceScope = currentUser ? userProfile?.workspaceId || currentUser.uid : 'demo';
-  return <ProfileSession key={`${userId}:${workspaceScope}`} userId={userId} workspaceScope={workspaceScope}>{children}</ProfileSession>;
+  return <ProfileSession key={`${profileUserId}:${workspaceScope}`} userId={profileUserId} settingsUserId={userId} workspaceScope={workspaceScope}>{children}</ProfileSession>;
 }
-function ProfileSession({ children, userId, workspaceScope }: { children: ReactNode; userId: string; workspaceScope: string }) {
-  const [appearance, updateAppearance] = useState(() => appearanceRepository.get(userId));
+function ProfileSession({ children, userId, settingsUserId, workspaceScope }: { children: ReactNode; userId: string; settingsUserId: string; workspaceScope: string }) {
+  const { isDemo } = useAuth();
+  const { user: officeUser, saveOwnProfile } = useOffice();
+  const [appearance, updateAppearance] = useState(() => appearanceRepository.get(settingsUserId));
   useLayoutEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => { document.documentElement.dataset.theme = appearance === 'system' ? media.matches ? 'dark' : 'light' : appearance; };
@@ -43,9 +48,9 @@ function ProfileSession({ children, userId, workspaceScope }: { children: ReactN
     if (appearance === 'system') media.addEventListener('change', apply);
     return () => media.removeEventListener('change', apply);
   }, [appearance]);
-  const setAppearance = (value: Appearance) => { appearanceRepository.save(userId, value); updateAppearance(value); };
-  const [notificationPreferences, updateNotificationPreferences] = useState(() => notificationPreferencesRepository.get(userId));
-  const setNotificationPreferences = (value: NotificationPreferences) => { notificationPreferencesRepository.save(userId, value); updateNotificationPreferences(value); };
+  const setAppearance = (value: Appearance) => { appearanceRepository.save(settingsUserId, value); updateAppearance(value); };
+  const [notificationPreferences, updateNotificationPreferences] = useState(() => notificationPreferencesRepository.get(settingsUserId));
+  const setNotificationPreferences = (value: NotificationPreferences) => { notificationPreferencesRepository.save(settingsUserId, value); updateNotificationPreferences(value); };
   const [configuration, updateConfiguration] = useState(() => configurationRepository.get(workspaceScope));
   const [assigneesState, setAssigneesState] = useState(() => {
     try { return { items: assigneesRepository.list(workspaceScope), error: '' }; }
@@ -54,8 +59,8 @@ function ProfileSession({ children, userId, workspaceScope }: { children: ReactN
   useEffect(() => {
     if (workspaceScope !== 'demo') return;
     const refresh = () => {
-      updateAppearance(appearanceRepository.get(userId));
-      updateNotificationPreferences(notificationPreferencesRepository.get(userId));
+      updateAppearance(appearanceRepository.get(settingsUserId));
+      updateNotificationPreferences(notificationPreferencesRepository.get(settingsUserId));
       updateConfiguration(configurationRepository.get(workspaceScope));
       setAssigneesState({ items: assigneesRepository.list(workspaceScope), error: '' });
       setProfile(null);
@@ -63,7 +68,7 @@ function ProfileSession({ children, userId, workspaceScope }: { children: ReactN
     };
     window.addEventListener('abogadospro:demo-reset', refresh);
     return () => window.removeEventListener('abogadospro:demo-reset', refresh);
-  }, [userId, workspaceScope]);
+  }, [userId, settingsUserId, workspaceScope]);
   const addAssignee = (data: AssigneeInput) => {
     const items = assigneesRepository.add(workspaceScope, data);
     setAssigneesState({ items, error: '' });
@@ -90,7 +95,7 @@ function ProfileSession({ children, userId, workspaceScope }: { children: ReactN
     let active = true;
     void (async () => {
       try {
-        const value = await profileRepository.get(userId);
+        const value = await profileRepository.get(userId) || (userId === 'demo-jefe' ? await profileRepository.get(DEMO_PROFILE_USER) : null);
         const url = value ? await profileRepository.photoUrl(value) : null;
         if (active) { setProfile(value); setPhotoUrl(url); }
       } catch (err) { if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar el perfil.'); }
@@ -101,6 +106,7 @@ function ProfileSession({ children, userId, workspaceScope }: { children: ReactN
   const save = async (data: ProfileData, photo?: File) => {
     const value = await profileRepository.save(userId, data, photo);
     const url = await profileRepository.photoUrl(value);
+    if (isDemo && officeUser) await saveOwnProfile(value.nombre, url || undefined);
     setProfile(value); setPhotoUrl(url); setError('');
   };
   return <ProfileContext.Provider value={{ profile, photoUrl, loading, error, save, appearance, setAppearance, notificationPreferences, setNotificationPreferences, configuration, setCategoryOptions, setExpensesReimbursableByDefault, assignees: assigneesState.items, assigneesError: assigneesState.error, addAssignee, updateAssignee }}>{children}</ProfileContext.Provider>;

@@ -181,13 +181,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Hora
           <input aria-label="Hora" type="time" step="60" value={hora} onChange={e => setHora(e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
         </label>
-        <div>
-          <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-            <input type="checkbox" checked={reembolsable} onChange={(e) => setReembolsable(e.target.checked)} className="accent-brand-900" />
-            Reembolsable por el cliente
-          </label>
-          <p className="mt-1 pl-5 text-[11px] text-slate-500">Si lo marcas, este gasto se sumará a lo que debe el cliente.</p>
-        </div>
+        <div><label htmlFor="expense-kind" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700">Tipo de gasto</label><select id="expense-kind" value={reembolsable ? 'reembolsable' : 'no-reembolsable'} onChange={event => setReembolsable(event.target.value === 'reembolsable')} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="reembolsable">Reembolsable</option><option value="no-reembolsable">No reembolsable</option></select></div>
 
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">

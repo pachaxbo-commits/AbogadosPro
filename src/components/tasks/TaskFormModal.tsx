@@ -2,9 +2,11 @@ import { useCallback, useId, useRef, useState } from 'react';
 import { CaseSearchSelect } from '../common/CaseSearchSelect';
 import { searchCases } from '../../services/caseSearch';
 import { Modal } from '../common/Modal';
-import { AssigneeSelect } from '../common/AssigneeSelect';
+
 import { useLegalData } from '../../context/LegalDataContext';
 import { validateTask } from '../../services/tasks';
+import { OfficePeoplePicker } from '../common/OfficePeoplePicker';
+import { useOffice } from '../../context/OfficeContext';
 import type { DatosTarea, PrioridadTarea, Tarea } from '../../types';
 
 const field = 'mt-1 w-full min-w-0 min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-900';
@@ -14,10 +16,11 @@ export function TaskFormModal({ onClose, onSuccess, task, casoId }: {
   onClose: () => void; onSuccess?: () => void; task?: Tarea; casoId?: string;
 }) {
   const { cases, casesWithDetails, addTask, updateTask } = useLegalData();
+  const { user: officeUser } = useOffice();
   const findCases = useCallback(async (query: string, limit: number) => searchCases(casesWithDetails, query, limit), [casesWithDetails]);
   const id = useId();
   const [data, setData] = useState<DatosTarea>(() => ({
-    casoId: task?.casoId || casoId || '', encargadoId: task?.encargadoId || '', titulo: task?.titulo || '',
+    casoId: task?.casoId || casoId || '', assignedUserIds: task?.assignedUserIds || [], sharedWithUserIds: task?.sharedWithUserIds || [], titulo: task?.titulo || '',
     fechaLimite: task?.fechaLimite || '', horaLimite: task?.horaLimite || '',
     prioridad: task?.prioridad || 'Normal', descripcion: task?.descripcion || '',
   }));
@@ -47,9 +50,7 @@ export function TaskFormModal({ onClose, onSuccess, task, casoId }: {
       <div><label className={label} htmlFor={`${id}-title`}>Título de la tarea *</label>
         <input id={`${id}-title`} required className={field} value={data.titulo} onChange={(e) => change({ titulo: e.target.value })} placeholder="Ej: Preparar memorial" />
       </div>
-      <div><label className={label} htmlFor={`${id}-assignee`}>Encargado (opcional)</label>
-        <AssigneeSelect id={`${id}-assignee`} value={data.encargadoId || ''} onChange={(encargadoId) => change({ encargadoId })} className={field} />
-      </div>
+      {officeUser?.role === 'abogado' && <><OfficePeoplePicker value={data.assignedUserIds || []} onChange={assignedUserIds => change({ assignedUserIds })} role="asistente" label="Asignar asistentes" /><OfficePeoplePicker value={data.sharedWithUserIds || []} onChange={sharedWithUserIds => change({ sharedWithUserIds })} role="abogado" label="Compartir tarea con abogados" excludeCurrent /></>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="min-w-0"><label className={label} htmlFor={`${id}-date`}>Fecha límite *</label>
           <input id={`${id}-date`} type="date" required className={field} value={data.fechaLimite} onChange={(e) => change({ fechaLimite: e.target.value })} />

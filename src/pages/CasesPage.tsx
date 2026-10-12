@@ -2,7 +2,8 @@ import { eventState } from '../services/eventResults';
 import React, { useState, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
-import { useProfile } from '../context/ProfileContext';
+
+import { useOffice } from '../context/OfficeContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { CaseFormModal } from '../components/cases/CaseFormModal';
 import { formatFecha, formatHora, getTodayIsoString } from '../services/formatters';
@@ -23,7 +24,8 @@ const normalizeSearch = (value: string) => value.toLowerCase().trim().replace(/\
 
 export const CasesPage: React.FC = () => {
   const { casesWithDetails, clients, eventsWithCase, activities, documents, tasks, events } = useLegalData();
-  const { assignees } = useProfile();
+  const { users, user: officeUser } = useOffice();
+  const assistant = officeUser?.role === 'asistente';
   const now = useTaskClock();
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,13 +35,14 @@ export const CasesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedArea, setSelectedArea] = useState<string>('Todas');
   const [selectedEstado, setSelectedEstado] = useState<string>('Todos');
-  const [selectedEncargado, setSelectedEncargado] = useState('');
+  const [selectedAssistant, setSelectedAssistant] = useState('');
+  const [sharedOnly, setSharedOnly] = useState(false);
   const [selectedSeguimiento, setSelectedSeguimiento] = useState('todos');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => searchParams.get('estado') === 'activos' ? 'Activos' : 'Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
-  const assigneeMap = useMemo(() => new Map(assignees.map((item) => [item.id, item.nombre])), [assignees]);
+  const assistantMap = useMemo(() => new Map(users.map((item) => [item.id, item.displayName])), [users]);
   const areas = [...new Set(['Civil', 'Penal', 'Familiar', 'Laboral', ...casesWithDetails.map((caso) => caso.area)])];
   const today = getTodayIsoString();
   const upcomingByCase = useMemo(() => {
@@ -76,13 +79,14 @@ export const CasesPage: React.FC = () => {
       const matchesQuickFilter = quickFilter === 'Todos' ||
         (quickFilter === 'Activos' && (caso.estado === 'Activo' || caso.estado === 'En trámite'));
 
-      const matchesAssignee = !selectedEncargado || (selectedEncargado === '__unassigned__' ? !caso.encargadoId : caso.encargadoId === selectedEncargado);
+      const matchesAssignee = !selectedAssistant || (selectedAssistant === '__unassigned__' ? !caso.assignedUserIds?.length : caso.assignedUserIds?.includes(selectedAssistant));
+      const matchesShared = !sharedOnly || (officeUser?.role === 'abogado' && caso.ownerUserId !== officeUser.id && caso.sharedWithUserIds?.includes(officeUser.id));
       const followUp = followUpByCase.get(caso.id);
       const matchesFollowUp = selectedSeguimiento === 'todos' || (selectedSeguimiento === 'sin' ? followUp?.frequency === null : selectedSeguimiento === 'al-dia' ? followUp?.state === 'al-dia' || (followUp?.state === 'concluido' && followUp.frequency !== null) : followUp?.state === selectedSeguimiento);
 
-      return matchesSearch && matchesArea && matchesEstado && matchesQuickFilter && matchesAssignee && matchesFollowUp;
+      return matchesSearch && matchesArea && matchesEstado && matchesQuickFilter && matchesAssignee && matchesFollowUp && matchesShared;
     });
-  }, [casesWithDetails, clientMap, searchTerm, selectedArea, selectedEstado, selectedEncargado, selectedSeguimiento, quickFilter, followUpByCase]);
+  }, [casesWithDetails, clientMap, searchTerm, selectedArea, selectedEstado, selectedAssistant, selectedSeguimiento, quickFilter, followUpByCase, sharedOnly, officeUser]);
 
   return (
     <div className="space-y-5">
@@ -102,6 +106,7 @@ export const CasesPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
+          hidden={assistant}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-amber-400 bg-amber-400 px-4 py-2.5 text-sm font-bold text-brand-950 transition-colors hover:bg-amber-300"
         >
           <FilePlus className="w-4 h-4" />
@@ -162,21 +167,18 @@ export const CasesPage: React.FC = () => {
             <option value="Concluido">Concluido</option>
           </select>
 
-          <select aria-label="Filtrar casos por encargado" value={selectedEncargado} onChange={(e) => setSelectedEncargado(e.target.value)} className="min-h-10 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900">
-            <option value="">Todos los encargados</option>
-            <option value="__unassigned__">Sin encargado</option>
-            {assignees.map((item) => <option key={item.id} value={item.id}>{item.nombre}{item.estado === 'Inactivo' ? ' (inactivo)' : ''}</option>)}
-          </select>
+          <select aria-label="Filtrar casos por asistente" value={selectedAssistant} onChange={(e) => setSelectedAssistant(e.target.value)} className="min-h-10 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700"><option value="">Todos los asistentes</option><option value="__unassigned__">Sin asignar</option>{users.filter(item => item.role === 'asistente').map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select>
+          {officeUser?.role === 'abogado' && <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={sharedOnly} onChange={event => setSharedOnly(event.target.checked)} />Compartido conmigo</label>}
           <select aria-label="Filtrar casos por seguimiento" value={selectedSeguimiento} onChange={(e) => setSelectedSeguimiento(e.target.value)} className="min-h-10 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900">
             <option value="todos">Todo seguimiento</option><option value="al-dia">Al día</option><option value="requiere">Requieren seguimiento</option><option value="sin">Sin seguimiento</option>
           </select>
 
-          {(selectedArea !== 'Todas' || selectedEstado !== 'Todos' || selectedEncargado || selectedSeguimiento !== 'todos' || searchTerm || quickFilter !== 'Todos') && (
+          {(selectedArea !== 'Todas' || selectedEstado !== 'Todos' || selectedAssistant || selectedSeguimiento !== 'todos' || searchTerm || (quickFilter !== 'Todos' || sharedOnly)) && (
             <button
               onClick={() => {
                 setSelectedArea('Todas');
                 setSelectedEstado('Todos');
-                setSelectedEncargado('');
+                setSelectedAssistant('');
                 setSelectedSeguimiento('todos');
                 setSearchTerm('');
                 setQuickFilter('Todos');
@@ -209,7 +211,7 @@ export const CasesPage: React.FC = () => {
       {filteredCases.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-xs">
           <Briefcase className="mx-auto mb-3 h-9 w-9 text-brand-700" />
-          <p className="text-sm font-semibold text-slate-700">{searchTerm || selectedArea !== 'Todas' || selectedEstado !== 'Todos' || selectedEncargado || selectedSeguimiento !== 'todos' || quickFilter !== 'Todos' ? 'No se encontraron casos' : 'No hay casos registrados todavía.'}</p>
+          <p className="text-sm font-semibold text-slate-700">{searchTerm || selectedArea !== 'Todas' || selectedEstado !== 'Todos' || selectedAssistant || selectedSeguimiento !== 'todos' || (quickFilter !== 'Todos' || sharedOnly) ? 'No se encontraron casos' : 'No hay casos registrados todavía.'}</p>
           <p className="text-xs text-slate-500 mt-1">
             Modifica los filtros seleccionados o abre un nuevo caso.
           </p>
@@ -257,7 +259,7 @@ export const CasesPage: React.FC = () => {
                       </div>
                       <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
                         <span>Rol: <span className="font-medium text-slate-600">{caso.participacion}</span></span>
-                        <span>Encargado: <span className="font-medium text-slate-700">{caso.encargadoId ? assigneeMap.get(caso.encargadoId) || 'No disponible' : 'Sin encargado'}</span></span>
+                        <span>Asistentes: <span className="font-medium text-slate-700">{caso.assignedUserIds?.map(userId => assistantMap.get(userId) || 'No disponible').join(', ') || 'Sin asignar'}</span></span>
                       </div>
                       <span className={`mt-1 inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold ${followUpByCase.get(caso.id)?.state === 'requiere' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{followUpByCase.get(caso.id)?.state === 'requiere' ? `Requiere seguimiento · ${followUpByCase.get(caso.id)?.overdueDays} d` : followUpByCase.get(caso.id)?.state === 'sin' ? 'Sin seguimiento' : followUpByCase.get(caso.id)?.state === 'concluido' ? 'Concluido' : 'Al día'}</span>
                     </td>

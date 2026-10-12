@@ -2,20 +2,21 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { useLegalData } from '../../context/LegalDataContext';
-import { useProfile } from '../../context/ProfileContext';
+import { useOffice } from '../../context/OfficeContext';
 import { taskTiming } from '../../services/tasks';
 import { formatFecha } from '../../services/formatters';
 import { Modal } from '../common/Modal';
 import { TaskFormModal } from './TaskFormModal';
 import { TaskCompletionModal } from './TaskCompletionModal';
 import type { Tarea } from '../../types';
+import { SharedWithLabel } from '../common/SharedWithLabel';
 
 const button = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-900 hover:bg-brand-50 transition-colors disabled:opacity-50';
 const priorityStyle = { Alta: 'border-rose-200 text-rose-800 bg-rose-50', Media: 'border-amber-200 text-amber-800 bg-amber-50', Normal: 'border-slate-200 text-slate-600 bg-slate-50' };
 
 export function TaskList({ tasks, now, compact = false, showCase = true }: { tasks: Tarea[]; now: Date; compact?: boolean; showCase?: boolean }) {
   const { casesWithDetails, setTaskStatus, deleteTask } = useLegalData();
-  const { assignees } = useProfile();
+  const { users, user: officeUser } = useOffice();
   const [editing, setEditing] = useState<Tarea | null>(null);
   const [completing, setCompleting] = useState<Tarea | null>(null);
   const [deleting, setDeleting] = useState<Tarea | null>(null);
@@ -38,17 +39,19 @@ export function TaskList({ tasks, now, compact = false, showCase = true }: { tas
       const timing = taskTiming(task, now);
       const caso = caseMap.get(task.casoId);
       const complete = task.estado === 'Completada';
+      const canManage = !officeUser || (officeUser.role === 'abogado' && (task.ownerUserId === officeUser.id || caso?.ownerUserId === officeUser.id));
       return <article key={task.id} className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-xs" aria-label={task.titulo}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h3 className="min-w-0 flex-1 break-words text-sm font-semibold text-slate-900 [overflow-wrap:anywhere]">{task.titulo}</h3>
           <span className={`shrink-0 rounded border px-2 py-0.5 text-xs font-medium ${priorityStyle[task.prioridad]}`}>{task.prioridad}</span>
         </div>
+        <SharedWithLabel kind="task" itemId={task.id} ownerUserId={task.ownerUserId} sharedWithUserIds={task.sharedWithUserIds} sharePermissions={task.sharePermissions} />
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className={`font-semibold ${timing.kind === 'vencida' ? 'text-rose-800' : timing.kind === 'hoy' ? 'text-amber-800' : complete ? 'text-emerald-800' : 'text-slate-600'}`}>{timing.label}</span>
           <span className="text-slate-500">{formatFecha(task.fechaLimite)}{task.horaLimite && ` · ${task.horaLimite}`}</span>
         </div>
         {showCase && <p className="mt-2 break-words text-xs text-slate-600 [overflow-wrap:anywhere]">{caso?.nombre || 'Caso no disponible'}{!compact && caso && <span className="mt-1 block text-slate-500">{caso.clienteNombre}</span>}</p>}
-        {task.encargadoId && <p className="mt-1 text-xs text-slate-600">Encargado: <span className="font-medium text-brand-900">{assignees.find((item) => item.id === task.encargadoId)?.nombre || 'No disponible'}</span></p>}
+        {Boolean(task.assignedUserIds?.length) && <p className="mt-1 text-xs text-slate-600">Asistentes: <span className="font-medium text-brand-900">{task.assignedUserIds?.map(id => users.find(person => person.id === id)?.displayName || 'No disponible').join(', ')}</span></p>}
         {!compact && task.descripcion && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600 [overflow-wrap:anywhere]">{task.descripcion}</p>}
         {!compact && complete && task.completedAt && <p className="mt-2 text-xs text-slate-500">Finalizada: {new Intl.DateTimeFormat('es-BO', { timeZone: 'America/La_Paz', dateStyle: 'short', timeStyle: 'short' }).format(new Date(task.completedAt))}</p>}
         {complete && task.resultadoFinalizacion && <details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer font-medium text-brand-900">Ver resultado</summary><p className="mt-2 whitespace-pre-wrap break-words">{task.resultadoFinalizacion}</p></details>}
@@ -56,7 +59,7 @@ export function TaskList({ tasks, now, compact = false, showCase = true }: { tas
           <button type="button" disabled={busy} className={button} onClick={() => complete ? void act(() => setTaskStatus(task.id, 'Pendiente'), 'Tarea reabierta correctamente.') : setCompleting(task)}>
             {complete ? <RotateCcw className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}{complete ? 'Reabrir tarea' : 'Completar'}
           </button>
-          {!compact && <>
+          {!compact && canManage && <>
             <button type="button" className={button} disabled={busy} onClick={() => setEditing(task)}><Pencil className="h-3.5 w-3.5" />Editar</button>
             <button type="button" className={button} disabled={busy} onClick={() => { setError(''); setDeleting(task); }}><Trash2 className="h-3.5 w-3.5" />Eliminar</button>
           </>}
