@@ -1,6 +1,8 @@
 import type { OfficeRole, OfficeUser } from './internalAuth';
 
 export const DEMO_OFFICE_PASSWORD = 'Demo2026!Prueba';
+const DEMO_SESSION_KEY = 'abogadospro_demo_office_session_v1';
+const DEMO_WORKSPACE_ID = 'demo';
 
 const initialUsers: OfficeUser[] = [
   { id: 'demo-jefe', displayName: 'Admin del estudio', role: 'abogado', isOfficeAdmin: true, active: true, email: '', sessionVersion: 1, canRegisterExpenses: true },
@@ -24,6 +26,26 @@ async function savePassword(id: string, password: string) {
   credentials.set(id, { salt, hash: await digest(password, salt) });
 }
 export function listDemoUsers(): OfficeUser[] { return users.map(item => ({ ...item })); }
+export function saveDemoOfficeSession(internalUserId: string) {
+  try { localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify({ workspaceId: DEMO_WORKSPACE_ID, internalUserId })); }
+  catch { /* El Demo sigue disponible si el navegador bloquea el almacenamiento. */ }
+}
+export function clearDemoOfficeSession() {
+  try { localStorage.removeItem(DEMO_SESSION_KEY); }
+  catch { /* El Demo sigue disponible si el navegador bloquea el almacenamiento. */ }
+}
+export function restoreDemoOfficeSession(): OfficeUser | null {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(DEMO_SESSION_KEY) || 'null');
+    if (!stored || typeof stored !== 'object') return null;
+    const { workspaceId, internalUserId } = stored as { workspaceId?: unknown; internalUserId?: unknown };
+    const user = workspaceId === DEMO_WORKSPACE_ID && typeof internalUserId === 'string'
+      ? users.find(item => item.id === internalUserId && item.active) : undefined;
+    if (user) return { ...user };
+  } catch { /* Sesión local inválida: volver a selección. */ }
+  clearDemoOfficeSession();
+  return null;
+}
 export async function verifyDemoUser(id: string, password: string): Promise<OfficeUser> {
   const user = users.find(item => item.id === id && item.active);
   if (!user) throw new Error('Perfil inactivo o inexistente.');
@@ -66,6 +88,7 @@ export async function changeDemoPassword(id: string, oldPassword: string, newPas
   await resetDemoPassword(id, newPassword);
 }
 export function resetDemoUsers() {
+  clearDemoOfficeSession();
   users = initialUsers.map(item => ({ ...item }));
   credentials.clear();
 }

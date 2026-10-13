@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { User } from 'firebase/auth';
 import { useAuth } from './AuthContext';
 import { profileRepository } from '../repositories';
-import { listDemoUsers, verifyDemoUser, createDemoUser, updateDemoUser, resetDemoPassword, changeDemoPassword, resetDemoUsers, updateOwnDemoProfile } from '../services/demoOffice';
+import { listDemoUsers, verifyDemoUser, createDemoUser, updateDemoUser, resetDemoPassword, changeDemoPassword, resetDemoUsers, updateOwnDemoProfile, saveDemoOfficeSession, clearDemoOfficeSession, restoreDemoOfficeSession } from '../services/demoOffice';
 import { changeOfficePassword, enterOfficeUser, leaveOfficeUser, officeRequest, officeAuthEnabled, type OfficeRole, type OfficeUser } from '../services/internalAuth';
 
 type OfficeState = 'guest' | 'loading' | 'setup' | 'select' | 'active' | 'error';
@@ -25,7 +25,7 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<OfficeUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const refresh = useCallback(async () => {
-    if (isDemo) { setUsers(listDemoUsers()); setState('select'); return; }
+    if (isDemo) { setUsers(listDemoUsers()); const restored = restoreDemoOfficeSession(); setUser(restored); setState(restored ? 'active' : 'select'); return; }
     if (!officeAuthEnabled || !currentUser || userProfile?.role === 'admin') return;
     const result = await officeRequest<{ enabled: boolean; users: OfficeUser[] }>('list');
     setUsers(result.users);
@@ -34,7 +34,7 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
     if (isDemo) {
-      setUsers(listDemoUsers()); setUser(null); setFirebaseUser(null); setState('select');
+      setUsers(listDemoUsers()); setUser(null); setFirebaseUser(null); setState('loading');
       let cancelled = false;
       void (async () => {
         for (const item of listDemoUsers()) {
@@ -43,7 +43,12 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
             if (profile) updateOwnDemoProfile(item.id, profile.nombre, (await profileRepository.photoUrl(profile)) || undefined);
           } catch { /* El perfil local no debe impedir el acceso al demo. */ }
         }
-        if (!cancelled) setUsers(listDemoUsers());
+        if (!cancelled) {
+          setUsers(listDemoUsers());
+          const restored = restoreDemoOfficeSession();
+          setUser(restored);
+          setState(restored ? 'active' : 'select');
+        }
       })();
       return () => { cancelled = true; };
     }
@@ -94,11 +99,11 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
   const select = async (id: string, password: string) => {
     const selected = users.find(item => item.id === id && item.active);
     if (!selected) throw new Error('Selecciona un usuario activo.');
-    if (isDemo) { setUser(await verifyDemoUser(id, password)); setState('active'); return; }
+    if (isDemo) { const verified = await verifyDemoUser(id, password); saveDemoOfficeSession(verified.id); setUser(verified); setState('active'); return; }
     const signedIn = await enterOfficeUser(selected, password);
     setFirebaseUser(signedIn); setUser(selected); setState('active');
   };
-  const switchUser = async () => { if (!isDemo) await leaveOfficeUser(); setUser(null); setFirebaseUser(null); setState('select'); };
+  const switchUser = async () => { if (isDemo) clearDemoOfficeSession(); else await leaveOfficeUser(); setUser(null); setFirebaseUser(null); setState('select'); };
   const create = async (displayName: string, role: OfficeRole, password: string) => {
     if (isDemo) { if (!user?.isOfficeAdmin) throw new Error('Solo el Admin puede crear usuarios.'); await createDemoUser(displayName, role, password); setUsers(listDemoUsers()); return; }
     await officeRequest('create', { displayName, role, password }, firebaseUser); await refreshUsers();

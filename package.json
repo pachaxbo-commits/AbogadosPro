@@ -7,15 +7,20 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-"test": "node tests/run-tasks-tests.mjs",
-"admin": "node scripts/bootstrap-admin.mjs",
-"preview": "vite preview"
-},
-"dependencies": {
-  "@vercel/node": "^19.0.0",
-  "firebase": "^12.19.0",
-  "firebase-admin": "^12.7.0",
+    "test": "node tests/run-tasks-tests.mjs",
+    "admin": "node scripts/bootstrap-admin.mjs",
+    "import:legal": "node scripts/import-legal-agro.ts",
+    "import:legal:agro-detail": "node scripts/import-legal-agro-detail.ts",
+    "import:legal:normativa": "node scripts/import-legal-normativa.ts",
+    "sync:legal": "node scripts/sync-legal.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vercel/node": "^19.0.0",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^12.7.0",
     "lucide-react": "^1.49.0",
+    "pdfjs-dist": "^5.6.205",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",

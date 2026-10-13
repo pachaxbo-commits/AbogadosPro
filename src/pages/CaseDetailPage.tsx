@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
 import { useOffice } from '../context/OfficeContext';
+import { useAuth } from '../context/AuthContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
 import { ActivityTimeline } from '../components/activities/ActivityTimeline';
 import { ActivityFormModal } from '../components/activities/ActivityFormModal';
@@ -19,6 +20,8 @@ import { CaseFollowUp } from '../components/cases/CaseFollowUp';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { TaskSummary } from '../components/tasks/TaskSummary';
 import { CaseDocuments } from '../components/documents/CaseDocuments';
+import { CaseInvestigations } from '../components/cases/CaseInvestigations';
+import { investigationsChanged, listCaseInvestigations } from '../services/caseInvestigations';
 import { EventResultAction, EventResultStatus } from '../components/events/EventResultAction';
 import { financialDate, compareFinancialDate } from '../services/finance';
 import { expenseReimbursementStatus } from '../services/expenseReimbursement';
@@ -37,13 +40,22 @@ import {
   Receipt,
   Info,
   ChevronDown,
+  FileSearch,
 } from 'lucide-react';
 
-type TabType = 'resumen' | 'actividad' | 'agenda' | 'documentos' | 'finanzas';
+type TabType = 'resumen' | 'actividad' | 'agenda' | 'documentos' | 'investigaciones' | 'finanzas';
 
 export const CaseDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { users, user: officeUser } = useOffice();
+  const { isDemo, userProfile } = useAuth();
+  const workspaceId = isDemo ? 'demo' : userProfile?.workspaceId || '';
+  const [, setInvestigationVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () => setInvestigationVersion(value => value + 1);
+    window.addEventListener(investigationsChanged, refresh);
+    return () => window.removeEventListener(investigationsChanged, refresh);
+  }, []);
   const assistant = officeUser?.role === 'asistente';
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -66,7 +78,7 @@ export const CaseDetailPage: React.FC = () => {
   } = useLegalData();
 
   const tabParam = searchParams.get('tab') as TabType;
-  const activeTab: TabType = (!assistant || ['resumen', 'agenda'].includes(tabParam)) && ['resumen', 'actividad', 'agenda', 'documentos', 'finanzas'].includes(tabParam)
+  const activeTab: TabType = (!assistant || ['resumen', 'agenda'].includes(tabParam)) && ['resumen', 'actividad', 'agenda', 'documentos', 'investigaciones', 'finanzas'].includes(tabParam)
     ? tabParam
     : 'resumen';
   const selectedEventId = searchParams.get('evento');
@@ -119,6 +131,7 @@ export const CaseDetailPage: React.FC = () => {
   const [taskSuccess, setTaskSuccess] = useState('');
 
   const caso = id ? getCaseWithDetails(id) : undefined;
+  const investigations = caso ? listCaseInvestigations(workspaceId, caso, officeUser, isDemo) : [];
   useEffect(() => {
     if (caso && officeUser?.id && caso.sharedWithUserIds?.includes(officeUser.id)) markSharedNoticeRead('case', caso.id, officeUser.id);
   }, [caso?.id, caso?.sharedWithUserIds, officeUser?.id]);
@@ -411,6 +424,8 @@ export const CaseDetailPage: React.FC = () => {
             <FileText className="w-4 h-4" /><span>DOCUMENTOS ({documentsError ? '—' : documentCount})</span>
           </button>)}
 
+          {!assistant && <button type="button" onClick={() => handleTabChange('investigaciones')} className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors sm:text-sm ${activeTab === 'investigaciones' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}><FileSearch className="h-4 w-4" /><span>INVESTIGACIONES{investigations.length ? ` (${investigations.length})` : ''}</span></button>}
+
 {!assistant && (          <button
             type="button"
             onClick={() => handleTabChange('finanzas')}
@@ -428,6 +443,7 @@ export const CaseDetailPage: React.FC = () => {
 
       {/* CONTENIDO DE PESTAÑAS */}
       {!assistant && activeTab === 'documentos' && <CaseDocuments key={caso.id} casoId={caso.id} readOnly={!canEditCase} />}
+      {!assistant && officeUser && activeTab === 'investigaciones' && <CaseInvestigations caso={caso} user={officeUser} users={users} items={investigations} workspaceId={workspaceId} isDemo={isDemo} />}
 
       {/* PESTAÑA 1: RESUMEN DEL CASO */}
       {activeTab === 'resumen' && (

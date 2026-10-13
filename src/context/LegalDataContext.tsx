@@ -31,6 +31,7 @@ import { useAuth } from './AuthContext';
 import { useOffice } from './OfficeContext';
 import { internalDb } from '../services/internalAuth';
 import { clearSharedNotices } from '../services/demoShareNotifications';
+import { clearDemoInvestigations, removeCaseInvestigations } from '../services/caseInvestigations';
 import { canCreateClient, canCreateCase } from '../config/plans';
 
 interface LegalDataContextType {
@@ -375,6 +376,7 @@ documentRepository.getDocuments().catch((err) => {
     }
     await demoLegalRepository.resetToInitial();
     clearSharedNotices();
+    clearDemoInvestigations('demo');
     await documentRepository.clearTemporaryFiles();
     await loadAll();
     window.dispatchEvent(new Event('abogadospro:demo-reset'));
@@ -387,6 +389,7 @@ documentRepository.getDocuments().catch((err) => {
     const allDocuments = await documentRepository.getDocuments();
     const removed = await activeRepository.deleteCaseCascade(id, allDocuments);
     await documentRepository.releaseFiles(removed);
+    removeCaseInvestigations('demo', id);
     await loadAll();
   };
 

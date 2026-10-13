@@ -13,6 +13,7 @@ import {
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '../services/firebaseConfig';
 import { UserProfile } from '../types';
+import { clearDemoOfficeSession } from '../services/demoOffice';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -34,6 +35,18 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const DEMO_STORAGE_KEY = 'abogadospro_demo_mode_active';
+function readDemoMode() {
+  if (localStorage.getItem(DEMO_STORAGE_KEY) === 'true') return true;
+  // Conservar una sesión Demo iniciada antes del cambio de sessionStorage a localStorage.
+  if (sessionStorage.getItem(DEMO_STORAGE_KEY) !== 'true') return false;
+  localStorage.setItem(DEMO_STORAGE_KEY, 'true');
+  sessionStorage.removeItem(DEMO_STORAGE_KEY);
+  return true;
+}
+function clearDemoMode() {
+  localStorage.removeItem(DEMO_STORAGE_KEY);
+  sessionStorage.removeItem(DEMO_STORAGE_KEY);
+}
 
 export function getFriendlyAuthErrorMessage(errorCodeOrMessage: string): string {
   if (errorCodeOrMessage.includes('auth/invalid-credential') || errorCodeOrMessage.includes('auth/wrong-password')) {
@@ -69,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState<boolean>(() => {
-    return sessionStorage.getItem(DEMO_STORAGE_KEY) === 'true';
+    return readDemoMode();
   });
 
   const clearError = () => setError(null);
@@ -153,7 +166,7 @@ const firebaseAuth = auth;
           setCurrentUser(firebaseUser);
           setUserProfile(profile);
           setIsDemo(false);
-          sessionStorage.removeItem(DEMO_STORAGE_KEY);
+          clearDemoMode();
         } catch (err) {
           console.error('Error al obtener perfil de usuario:', err);
           setError('No fue posible cargar el perfil del usuario.');
@@ -162,8 +175,8 @@ const firebaseAuth = auth;
       } else {
         setCurrentUser(null);
         setUserProfile(null);
-        // Si no hay usuario y sessionStorage dice demo, activar demo
-        if (sessionStorage.getItem(DEMO_STORAGE_KEY) === 'true') {
+        // Si no hay usuario y el modo demo persistía, restaurarlo tras una recarga de Safari.
+        if (readDemoMode()) {
           setIsDemo(true);
         }
       }
@@ -183,7 +196,7 @@ const firebaseAuth = auth;
       setCurrentUser(cred.user);
       setUserProfile(profile);
       setIsDemo(false);
-      sessionStorage.removeItem(DEMO_STORAGE_KEY);
+      clearDemoMode();
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
       const friendly = getFriendlyAuthErrorMessage(errMessage);
@@ -252,7 +265,7 @@ const firebaseAuth = auth;
       setCurrentUser(cred.user);
       setUserProfile(newProfile);
       setIsDemo(false);
-      sessionStorage.removeItem(DEMO_STORAGE_KEY);
+      clearDemoMode();
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
       const friendly = getFriendlyAuthErrorMessage(errMessage);
@@ -275,12 +288,14 @@ const firebaseAuth = auth;
       setCurrentUser(null);
       setUserProfile(null);
       setIsDemo(false);
-      sessionStorage.removeItem(DEMO_STORAGE_KEY);
+      clearDemoMode();
+      clearDemoOfficeSession();
     }
   };
 
   const enterDemoMode = () => {
-    sessionStorage.setItem(DEMO_STORAGE_KEY, 'true');
+    clearDemoOfficeSession();
+    localStorage.setItem(DEMO_STORAGE_KEY, 'true');
     setIsDemo(true);
     if (currentUser) {
   if (auth) {
@@ -292,7 +307,8 @@ const firebaseAuth = auth;
   };
 
   const exitDemoMode = () => {
-    sessionStorage.removeItem(DEMO_STORAGE_KEY);
+    clearDemoOfficeSession();
+    clearDemoMode();
     setIsDemo(false);
   };
 
