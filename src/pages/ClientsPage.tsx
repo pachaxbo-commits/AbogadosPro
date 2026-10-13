@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
+import { useProfile } from '../context/ProfileContext';
 import { ClientFormModal } from '../components/clients/ClientFormModal';
 import { formatBs } from '../services/formatters';
 import {
@@ -13,15 +14,16 @@ import {
 } from 'lucide-react';
 
 type EstadoFiltro = 'Todos' | 'Con casos activos' | 'Con saldo pendiente';
-type AreaFiltro = 'Todas' | 'Civil' | 'Penal' | 'Familiar' | 'Laboral';
 
 export const ClientsPage: React.FC = () => {
   const { clientsWithSummary, casesWithDetails } = useLegalData();
+  const { configuration } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEstado, setSelectedEstado] = useState<EstadoFiltro>('Todos');
-  const [selectedArea, setSelectedArea] = useState<AreaFiltro>('Todas');
+  const [selectedArea, setSelectedArea] = useState('Todas');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
+  const areas = [...new Set([...configuration.categories.areas, ...casesWithDetails.map((caso) => caso.area)])];
 
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -106,14 +108,11 @@ export const ClientsPage: React.FC = () => {
           Área
           <select
             value={selectedArea}
-            onChange={(e) => setSelectedArea(e.target.value as AreaFiltro)}
+            onChange={(e) => setSelectedArea(e.target.value)}
             className="min-h-10 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-900"
           >
             <option value="Todas">Todas</option>
-            <option value="Civil">Civil</option>
-            <option value="Penal">Penal</option>
-            <option value="Familiar">Familiar</option>
-            <option value="Laboral">Laboral</option>
+            {areas.map(area => <option key={area} value={area}>{area}</option>)}
           </select>
         </label>
         <span className="ml-auto text-xs font-medium text-slate-500">{filteredClients.length} {filteredClients.length === 1 ? 'cliente' : 'clientes'}</span>

@@ -2,6 +2,7 @@ import { eventState } from '../services/eventResults';
 import React, { useState, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLegalData } from '../context/LegalDataContext';
+import { useProfile } from '../context/ProfileContext';
 
 import { useOffice } from '../context/OfficeContext';
 import { StatusBadge, AreaBadge, JudicialIdBadge } from '../components/common/StatusBadge';
@@ -24,6 +25,7 @@ const normalizeSearch = (value: string) => value.toLowerCase().trim().replace(/\
 
 export const CasesPage: React.FC = () => {
   const { casesWithDetails, clients, eventsWithCase, activities, documents, tasks, events } = useLegalData();
+  const { configuration } = useProfile();
   const { users, user: officeUser } = useOffice();
   const assistant = officeUser?.role === 'asistente';
   const now = useTaskClock();
@@ -43,7 +45,7 @@ export const CasesPage: React.FC = () => {
 
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
   const assistantMap = useMemo(() => new Map(users.map((item) => [item.id, item.displayName])), [users]);
-  const areas = [...new Set(['Civil', 'Penal', 'Familiar', 'Laboral', ...casesWithDetails.map((caso) => caso.area)])];
+  const areas = [...new Set([...configuration.categories.areas, ...casesWithDetails.map((caso) => caso.area)])];
   const today = getTodayIsoString();
   const upcomingByCase = useMemo(() => {
     const upcoming = new Map<string, (typeof eventsWithCase)[number]>();

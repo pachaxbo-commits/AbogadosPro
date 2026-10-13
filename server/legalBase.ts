@@ -61,17 +61,38 @@ export interface LegalSource {
 export interface LegalBase { version: 1; sources: LegalSource[]; documents: LegalDocument[]; imports: LegalImportRun[] }
 
 export const legalBasePath = resolve(process.cwd(), '.local-data', 'legal-base.json');
+export const legalSeedPath = resolve(process.cwd(), 'server', 'data', 'legal-base.seed.json');
 const emptyBase = (): LegalBase => ({ version: 1, sources: [{ id: 'agroambiental', name: 'Tribunal Agroambiental', officialUrl: 'https://arbol.tribunalagroambiental.bo/index.php?r=viewresolucion%2Flistaresoluciones', enabled: true }], documents: [], imports: [] });
 
-export async function readLegalBase(path = legalBasePath): Promise<LegalBase> {
+async function readStoredBase(path: string): Promise<LegalBase | null> {
   try {
     const data: unknown = JSON.parse(await readFile(path, 'utf8'));
     if (data && typeof data === 'object' && 'version' in data && data.version === 1 && 'documents' in data && Array.isArray(data.documents) && 'imports' in data && Array.isArray(data.imports) && 'sources' in data && Array.isArray(data.sources)) return data as LegalBase;
-    throw new Error('La base jurídica local tiene un formato inválido.');
+    throw new Error('La base jurídica tiene un formato inválido.');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyBase();
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
+}
+
+export async function readLegalBase(path = legalBasePath): Promise<LegalBase> {
+  // A custom path is an isolated repository (used by importers and tests).
+  if (path !== legalBasePath) return (await readStoredBase(path)) || emptyBase();
+  return readSharedLegalBase(path, legalSeedPath);
+}
+
+export async function readSharedLegalBase(overlayPath: string, seedPath: string): Promise<LegalBase> {
+  const [stored, seed] = await Promise.all([readStoredBase(overlayPath), readStoredBase(seedPath)]);
+  if (!seed) throw new Error('No se encontró el corpus jurídico global incluido en el proyecto.');
+  if (!stored) return seed;
+  // The server-side overlay contains manual syncs. Seed updates remain visible
+  // to every browser without overwriting records already refreshed locally.
+  return {
+    version: 1,
+    sources: [...new Map([...seed.sources, ...stored.sources].map(source => [source.id, source])).values()],
+    documents: [...new Map([...seed.documents, ...stored.documents].map(document => [document.id, document])).values()],
+    imports: [...new Map([...seed.imports, ...stored.imports].map(run => [run.id, run])).values()],
+  };
 }
 
 export async function writeLegalBase(base: LegalBase, path = legalBasePath) {
@@ -228,13 +249,16 @@ function dateInRange(document: LegalDocument, from?: string, to?: string) {
 }
 
 async function readSearchEntries(path: string): Promise<SearchEntry[]> {
-  let version = 'missing';
-  try {
-    const file = await stat(path, { bigint: true });
-    version = `${file.mtimeNs}:${file.ctimeNs}:${file.size}`;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
+  const paths = path === legalBasePath ? [legalSeedPath, path] : [path];
+  const version = (await Promise.all(paths.map(async filePath => {
+    try {
+      const file = await stat(filePath, { bigint: true });
+      return `${file.mtimeNs}:${file.ctimeNs}:${file.size}`;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing';
+      throw error;
+    }
+  }))).join('|');
   const cached = searchCache.get(path);
   if (cached?.version === version) return cached.entries;
   const entries = (await readLegalBase(path)).documents.map(document => ({ document, fields: fieldsOf(document) }));
@@ -320,5 +344,5 @@ export async function searchLegalBase(kind: LegalSearchKind, query: string, filt
     bestMatch: clearWinner && index === 0, highlightTerms, matchReason,
     url: document.officialUrl, source: document.source, kind: document.kind, verification: 'official-reference',
   }));
-  return { results, failedSources: [], notice: results.length ? `Resultados de la base jurídica local (${results.length}). Verifica siempre el documento original.` : 'No se encontraron resultados en la base jurídica local.' };
+  return { results, failedSources: [], notice: results.length ? `Resultados de la base jurídica compartida (${results.length}). Verifica siempre el documento original.` : 'No se encontraron resultados en la base jurídica compartida.' };
 }
